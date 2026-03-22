@@ -8,4 +8,5 @@ type Result struct {
 	InstructionPath  string
 	SharingLink      string
 	ListenPort       int
+	SSHPort          int
 }

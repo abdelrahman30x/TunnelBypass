@@ -27,6 +27,12 @@ func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 	_ = os.WriteFile(bannerCopyFile, []byte(sshWelcome+"\n"), 0644)
 
 	installer.BestEffortConfigureSSHBanner(sshWelcome)
+	
+	sshPort := opt.Port
+	remoteSSH := opt.SSHBackendPort
+	if remoteSSH <= 0 {
+		remoteSSH = 22
+	}
 
 	config := fmt.Sprintf(`# SSH Tunnel — Credentials & Client Commands
 # Server IP : %s
@@ -48,7 +54,7 @@ func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 #   UDPGW endpoint: 127.0.0.1:7300 (over SSH tunnel); portable: tunnelbypass run --portable ssh
 #   Mode via TB_UDPGW_MODE / TB_UDPGW_BINARY
 #
-`, opt.ServerAddr, opt.Port, sshUser, sshPass, opt.Port, sshUser, opt.ServerAddr, opt.Port, sshUser, opt.ServerAddr, installer.GetSystemSSHBannerPath(), bannerCopyFile)
+`, opt.ServerAddr, sshPort, sshUser, sshPass, sshPort, sshUser, opt.ServerAddr, sshPort, sshUser, opt.ServerAddr, installer.GetSystemSSHBannerPath(), bannerCopyFile)
 
 	fileName := "ssh_tunnel_instructions.txt"
 	targetPath := filepath.Join(configsDir, fileName)
@@ -71,6 +77,11 @@ func GenerateSSLConfig(opt types.ConfigOptions) (string, error) {
 
 	installer.BestEffortConfigureSSHBanner(sshWelcome)
 
+	remoteSSH := opt.SSHBackendPort
+	if remoteSSH <= 0 {
+		remoteSSH = 22
+	}
+
 	localStunnelPort := 2222
 	stunnelClientConf := filepath.Join(configsDir, "stunnel-client.conf")
 	_ = installer.WriteStunnelClientConfig(stunnelClientConf, opt.ServerAddr, opt.Port, localStunnelPort, opt.Sni)
@@ -90,12 +101,13 @@ Server:   %s:%d
 SNI:      %s
 User:     %s
 Password: %s
+# Server-side SSH port (stunnel target): %d
 
 RUN THIS FIRST (IMPORTANT):
 stunnel %s
 
 THEN RUN SSH SOCKS:
-ssh -D 1080 -N -p %d %s@127.0.0.1
+ssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@127.0.0.1
 
 Optional UDPGW port: 7300
 Welcome: %s
@@ -107,7 +119,7 @@ accept = 127.0.0.1:%d
 connect = %s:%d
 %s
 verify = 0
-`, opt.ServerAddr, opt.Port, sniForUi, sshUser, sshPass,
+`, opt.ServerAddr, opt.Port, sniForUi, sshUser, sshPass, remoteSSH,
 		stunnelClientConf,
 		localStunnelPort, sshUser,
 		firstLine,
@@ -134,13 +146,17 @@ func GenerateWSSConfig(opt types.ConfigOptions) (string, error) {
 	installer.BestEffortConfigureSSHBanner(sshWelcome)
 
 	localPort := 2222
-	remoteSSH := installer.GetSSHBackendPort()
+	remoteSSH := opt.SSHBackendPort
 	if remoteSSH <= 0 {
 		remoteSSH = 22
 	}
-	// wstunnel v10: tcp://localPort:remoteHost:remotePort for --local-to-remote
-	wstunnelCommand := fmt.Sprintf("wstunnel client --local-to-remote tcp://127.0.0.1:%d:127.0.0.1:%d wss://%s:%d", localPort, remoteSSH, opt.ServerAddr, opt.Port)
+	// wstunnel v10: -L tcp://localPort:remoteHost:remotePort
+	wstunnelCommand := fmt.Sprintf("wstunnel client -L tcp://127.0.0.1:%d:127.0.0.1:%d wss://%s:%d", localPort, remoteSSH, opt.ServerAddr, opt.Port)
 	if opt.Sni != "" {
+		// Use -H "Host: <SNI>" as recommended for stealth (fake SNI / Host Header)
+		wstunnelCommand += fmt.Sprintf(" -H \"Host: %s\"", opt.Sni)
+		// Also keep --tls-sni-override for actual TLS SNI if needed, 
+		// but -H is often what's used for the 'Fake' part.
 		wstunnelCommand += fmt.Sprintf(" --tls-sni-override %s", opt.Sni)
 	}
 
@@ -151,16 +167,20 @@ func GenerateWSSConfig(opt types.ConfigOptions) (string, error) {
 	}
 	config := fmt.Sprintf(`# TunnelBypass WSS (wstunnel) - Quick Instructions
 Server:   %s:%d
-SNI:      %s
+SNI/Host: %s
 User:     %s
 Password: %s
 # Server-side SSH port (wstunnel --restrict-to target): %d
 
-RUN THIS FIRST (IMPORTANT):
+RUN THIS FIRST (IMPORTANT) to start the WebSocket tunnel:
 %s
 
-THEN RUN SSH SOCKS:
-ssh -D 1080 -N -p %d %s@127.0.0.1
+THEN CONNECT VIA SSH (SOCKS5 Proxy):
+ssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@127.0.0.1
+
+HARDENING TIP (SERVER):
+For maximum stealth, ensure your server-side SSH only listens on 127.0.0.1 
+and that Port 22 is blocked in your firewall for external traffic.
 
 Optional UDPGW port: 7300
 Welcome: %s

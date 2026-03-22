@@ -61,6 +61,46 @@ func OpenFirewallPort(port int, protocol, name string) error {
 	}
 	return nil
 }
+// CloseFirewallPort removes or blocks an inbound firewall rule.
+func CloseFirewallPort(port int, protocol, name string) error {
+	if port <= 0 {
+		return nil
+	}
+	portStr := fmt.Sprintf("%d", port)
+	ruleName := strings.TrimSpace(name)
+	if ruleName == "" {
+		ruleName = "TunnelBypass-Port-" + portStr
+	}
+
+	if runtime.GOOS == "windows" {
+		if _, err := exec.Command("net", "session").Output(); err != nil {
+			return nil
+		}
+		// On Windows, we can either delete the rule or add a block rule.
+		// Deleting is cleaner if we created it.
+		_ = exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+ruleName).Run()
+		return nil
+	}
+
+	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
+		return nil
+	}
+
+	if _, err := exec.LookPath("ufw"); err == nil {
+		_ = exec.Command("ufw", "deny", fmt.Sprintf("%d/%s", port, protocol)).Run()
+		return nil
+	}
+	if _, err := exec.LookPath("firewall-cmd"); err == nil {
+		_ = exec.Command("firewall-cmd", "--permanent", "--remove-port="+portStr+"/"+protocol).Run()
+		_ = exec.Command("firewall-cmd", "--reload").Run()
+		return nil
+	}
+	if _, err := exec.LookPath("iptables"); err == nil {
+		_ = exec.Command("iptables", "-D", "INPUT", "-p", protocol, "--dport", portStr, "-j", "ACCEPT").Run()
+		return nil
+	}
+	return nil
+}
 
 // OpenFirewallOutboundPort adds an outbound firewall rule (Windows only).
 func OpenFirewallOutboundPort(remotePort int, protocol, name string) error {

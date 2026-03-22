@@ -19,6 +19,7 @@ type ConfigOptions struct {
 	SSHPassword       string `json:"ssh_password"`
 	SSHWelcomeMessage string `json:"ssh_welcome_message"`
 	SSHIsAdmin        bool   `json:"ssh_is_admin"`
+	SSHBackendPort    int    `json:"ssh_backend_port"`
 }
 
 // XrayServerConfig is used for parsing server-side configuration

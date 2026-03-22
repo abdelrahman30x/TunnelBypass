@@ -241,12 +241,8 @@ func provisionSSH(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	if err := installer.EnsureWindowsUser(opt.SSHUser, opt.SSHPassword, true, false); err != nil && log != nil {
 		log.Warn("provision: windows user", "err", err)
 	}
-	installer.EnsureManagedSSHConfig(opt.SSHUser)
-	if err := installer.EnsureSSHServerWithAuth(opt.SSHUser, opt.SSHPassword); err != nil && log != nil {
-		log.Warn("provision: ssh server ensure", "err", err)
-	}
-	if installer.SSHEmbedActive() {
-		opt.Port = installer.GetSSHBackendPort()
+	if err := ensureSSHBackend(log, &opt); err != nil {
+		return r, err
 	}
 
 	p, err := tbssh.GenerateSSHConfig(opt)
@@ -255,6 +251,7 @@ func provisionSSH(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	}
 	r.InstructionPath = p
 	r.ListenPort = opt.Port
+	r.SSHPort = opt.SSHBackendPort
 	return r, nil
 }
 
@@ -279,7 +276,9 @@ func provisionTLS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	if err := installer.EnsureWindowsUser(opt.SSHUser, opt.SSHPassword, true, false); err != nil && log != nil {
 		log.Warn("provision: windows user", "err", err)
 	}
-	installer.EnsureManagedSSHConfig(opt.SSHUser)
+	if err := ensureSSHBackend(log, &opt); err != nil {
+		return r, err
+	}
 
 	if err := ensurePortableStunnelArtifacts(log, opt); err != nil {
 		return r, err
@@ -291,6 +290,7 @@ func provisionTLS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	}
 	r.InstructionPath = p
 	r.ListenPort = opt.Port
+	r.SSHPort = opt.SSHBackendPort
 	return r, nil
 }
 
@@ -315,7 +315,9 @@ func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	if err := installer.EnsureWindowsUser(opt.SSHUser, opt.SSHPassword, true, false); err != nil && log != nil {
 		log.Warn("provision: windows user", "err", err)
 	}
-	installer.EnsureManagedSSHConfig(opt.SSHUser)
+	if err := ensureSSHBackend(log, &opt); err != nil {
+		return r, err
+	}
 
 	if err := ensurePortableWssCerts(log, opt); err != nil {
 		return r, err
@@ -327,6 +329,7 @@ func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	}
 	r.InstructionPath = p
 	r.ListenPort = opt.Port
+	r.SSHPort = opt.SSHBackendPort
 	return r, nil
 }
 
@@ -408,4 +411,20 @@ func NeedsProvision(transport string) bool {
 	default:
 		return false
 	}
+}
+
+func ensureSSHBackend(log *slog.Logger, opt *types.ConfigOptions) error {
+	installer.EnsureManagedSSHConfig(opt.SSHUser)
+	if err := installer.EnsureSSHServerWithAuth(opt.SSHUser, opt.SSHPassword); err != nil {
+		if log != nil {
+			log.Warn("provision: ssh server ensure", "err", err)
+		}
+		return err
+	}
+	if installer.SSHEmbedActive() {
+		opt.SSHBackendPort = installer.GetSSHBackendPort()
+	} else {
+		opt.SSHBackendPort = 22
+	}
+	return nil
 }

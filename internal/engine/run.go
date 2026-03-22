@@ -119,6 +119,11 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		return err
 	}
 
+	// Sync the actual backend port discovered/ensured during provisioning
+	if res.SSHPort > 0 {
+		spec.SSH.Port = res.SSHPort
+	}
+
 	if spec.Behavior.GenerateOnly || !spec.Behavior.AutoStart {
 		PrintResult(spec, res)
 		return nil
@@ -127,9 +132,6 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	infRun := runtimeenv.Detect()
 	serviceAfterProvision := !spec.Behavior.Portable && transportInstallsOSService(spec.Transport) && !infRun.LikelyContainer
 	if serviceAfterProvision {
-		if (spec.Transport == "wss" || spec.Transport == "tls") && spec.SSH.Port == 22 && installer.SSHEmbedActive() {
-			spec.SSH.Port = installer.GetSSHBackendPort()
-		}
 		PrintResult(spec, res)
 		if err := svcinstall.InstallRunTransportService(spec.Transport, opt, elevate.IsAdmin()); err != nil {
 			return err
@@ -272,19 +274,19 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 	fmt.Printf("\n  %sCommands%s\n", uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset)
 	switch transportName {
 	case "ssh":
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -p %d %s@%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Port, spec.Auth.SSHUser, endpoint, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Port, spec.Auth.SSHUser, endpoint, uicolors.ColorReset)
 	case "tls":
 		fmt.Printf("  %s·%s %sstunnel %s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, filepath.Join(installer.GetConfigDir("stunnel"), "stunnel-client.conf"), uicolors.ColorReset)
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
 	case "wss":
+		// Modern syntax: -L tcp://localPort:remoteHost:remotePort
+		// Use -H "Host: <SNI>" as recommended for stealth (fake SNI / Host Header)
+		cmd := fmt.Sprintf("wstunnel client -L tcp://127.0.0.1:2222:127.0.0.1:%d wss://%s:%d", sshPort, endpoint, spec.Port)
 		if sni != "" {
-			fmt.Printf("  %s·%s %swstunnel client --local-to-remote tcp://127.0.0.1:2222:127.0.0.1:%d wss://%s:%d --tls-sni-override %s%s\n",
-				uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, sshPort, endpoint, spec.Port, sni, uicolors.ColorReset)
-		} else {
-			fmt.Printf("  %s·%s %swstunnel client --local-to-remote tcp://127.0.0.1:2222:127.0.0.1:%d wss://%s:%d%s\n",
-				uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, sshPort, endpoint, spec.Port, uicolors.ColorReset)
+			cmd += fmt.Sprintf(" -H \"Host: %s\" --tls-sni-override %s", sni, sni)
 		}
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %s%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, cmd, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
 	}
 
 	fmt.Printf("\n  %s(Installed on this machine: %s)%s\n", uicolors.ColorGray, dataDir, uicolors.ColorReset)

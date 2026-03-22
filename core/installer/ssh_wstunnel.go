@@ -67,6 +67,12 @@ func EnsureSshWstunnelServer(wssPort int, username, password string, updatePassw
 	}
 
 	_ = OpenFirewallPort(wssPort, "tcp", serviceName)
+
+	fmt.Printf("    [*] WSS server is active on port %d -> SSH backend %s\n", wssPort, sshBack)
+	fmt.Printf("    [!] Recommendation: To hide your SSH server completely, you can now safely:\n")
+	fmt.Printf("        1. Modify /etc/ssh/sshd_config to set 'ListenAddress 127.0.0.1'.\n")
+	fmt.Printf("        2. Use a firewall to block external access to port 22.\n")
+
 	if err := EnsureSSHUDPGW(7300); err != nil {
 		fmt.Printf("    [!] Warning: UDPGW setup failed: %v\n", err)
 	}
