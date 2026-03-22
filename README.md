@@ -148,6 +148,7 @@ Wizard order and rough DPI-bypass strength (more stars ≈ stronger camouflage o
 | 4 | QUIC (Hysteria v2) | ★★ | `./tunnelbypass run --type hysteria --port 443 --sni epicgames.com --uuid auto` |
 | 5 | SSH | ★★ | `./tunnelbypass run ssh` |
 | 6 | WireGuard | ★ | `./tunnelbypass run --type wireguard --port 51820 --sni example.com` |
+| — | **Portable Mode** | — | `./tunnelbypass run portable <any_transport>` <br> (No elevation, no service install, same session) |
 
 ## Docker
 
@@ -180,6 +181,7 @@ tunnelbypass xray-svc | hysteria-svc | udpgw-svc   # service helpers
 ```bash
 tunnelbypass run ssh
 tunnelbypass run --daemon ssh
+tunnelbypass run portable <transport> # execute directly, skipping service/UAC elevation
 tunnelbypass run --data-dir /data --type reality --port 443 --sni example.com --uuid auto --dry-run
 ```
 
