@@ -134,7 +134,6 @@ func EnsureSSHUserOnly(username string) {
 		"\tPermitTunnel no",
 		"\tForceCommand echo \"Tunnel access only.\"",
 		"\tMaxSessions 10",
-		"\tMaxStartups 10:30:60",
 	}
 	if start != -1 {
 		newLines := make([]string, 0, len(lines)-(end-start)+len(block))
