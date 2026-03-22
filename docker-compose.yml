@@ -1,0 +1,37 @@
+# Minimal Compose example: persistent /data, optional interactive TTY, no fixed ports.
+#
+# Interactive wizard / menus (recommended):
+#   docker compose run --rm -it tunnelbypass
+#
+# Run a transport directly (add publish lines that match your listen ports):
+#   docker compose run --rm tunnelbypass run ssh
+#   docker compose run --rm -p 2222:2222 -p 7300:7300 tunnelbypass run ssh
+# Non-interactive Reality (generate configs then run; map 443 if you use 443):
+#   docker compose run --rm -p 443:443 tunnelbypass run --data-dir /data reality --port 443 --sni example.com --uuid auto
+#
+# Detached server-style (no TTY):
+#   docker compose run -d --name tb-ssh -p 2222:2222 -p 7300:7300 tunnelbypass run ssh
+#
+# Override image command:
+#   docker compose run --rm tunnelbypass run --daemon ssh
+
+services:
+  tunnelbypass:
+    build: .
+    image: tunnelbypass:local
+    volumes:
+      - tunnelbypass-data:/data
+    environment:
+      TB_LOG: json
+      TB_DATA_DIR: /data
+      TB_PORTABLE: "1"
+    # Interactive CLI; disable for detached-only usage (tty: false stdin_open: false)
+    stdin_open: true
+    tty: true
+    # Uncomment and set host:container to match TB_SSH_LISTEN, TB_UDPGW_PORT, --wss-port, etc.
+    # ports:
+    #   - "2222:2222"
+    #   - "7300:7300"
+
+volumes:
+  tunnelbypass-data:

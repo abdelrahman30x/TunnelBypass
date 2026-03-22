@@ -1,0 +1,33 @@
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+/bin/
+tunnelbypass.exe
+tunnelbypass
+client.exe
+
+# Scratch / debug files
+build_errors.txt
+dep_client.txt
+dep_server.txt
+
+# Runtime data (installed by the tool, not source)
+/logs/
+/ProgramData/
+
+# Platform install scripts (auto-generated)
+/linux/
+/windows/
+
+# Local Docker secrets
+docker/.env
+
+# IDE and OS metadata
+.idea/
+.vscode/
+*.DS_Store
+Thumbs.db

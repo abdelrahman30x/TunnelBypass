@@ -1,0 +1,105 @@
+{
+  "reality_dest_hosts": [
+    "cdn.jsdelivr.net",
+    "fonts.gstatic.com",
+    "ajax.googleapis.com",
+    "m.facebook.com"
+  ],
+
+  "categories": {
+
+    "egypt": [
+      "ekb.eg",
+      "study.ekb.eg",
+      "emis.gov.eg",
+      "stream.moe.gov.eg",
+      "moe.gov.eg",
+      "digital.gov.eg",
+      "services.gov.eg",
+      "data.gov.eg",
+      "tansik.digital.gov.eg",
+      "natega.emis.gov.eg",
+
+      "te.eg",
+      "my.te.eg",
+      "vodafone.com.eg",
+      "orange.eg",
+      "etisalat.eg"
+    ],
+
+    "social": [
+      "free.facebook.com",
+      "0.facebook.com",
+      "mbasic.facebook.com",
+      "m.facebook.com",
+      "www.facebook.com",
+
+      "whatsapp.com",
+      "web.whatsapp.com",
+      "www.whatsapp.com",
+
+      "instagram.com",
+      "www.instagram.com",
+
+      "twitter.com",
+      "mobile.twitter.com",
+
+      "tiktok.com",
+      "www.tiktok.com",
+
+      "snapchat.com"
+    ],
+
+    "gaming": [
+      "play.google.com",
+
+      "pubgmobile.com",
+      "www.pubg.com",
+      "igamecj.com",
+      "tencentgames.com",
+
+      "riotgames.com",
+      "leagueoflegends.com",
+
+      "www.ea.com",
+      "origin.com",
+
+      "www.playstation.com",
+
+      "epicgames.com",
+      "store.epicgames.com",
+
+      "steampowered.com",
+      "store.steampowered.com"
+    ],
+
+    "streaming": [
+      "youtube.com",
+      "m.youtube.com",
+      "youtubei.googleapis.com",
+      "ytimg.com",
+
+      "twitch.tv",
+
+      "netflix.com",
+      "nflxvideo.net",
+
+      "primevideo.com",
+
+      "disneyplus.com"
+    ],
+
+    "basic": [
+      "internet.org",
+      "freebasics.com"
+    ],
+
+    "cdn": [
+      "cdn.jsdelivr.net",
+      "fonts.gstatic.com",
+      "ajax.googleapis.com",
+      "cdnjs.cloudflare.com",
+      "cloudflare.com"
+    ]
+  }
+}

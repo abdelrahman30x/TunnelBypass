@@ -1,0 +1,15 @@
+.git
+.github
+.cursor
+*.exe
+*.exe~
+tunnelbypass
+tunnelbypass.exe
+**/__debug_bin
+**/node_modules
+.vscode
+.idea
+*.swp
+*.swo
+terminals
+*.log
