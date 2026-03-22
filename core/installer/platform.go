@@ -145,10 +145,19 @@ func EnsureWindowsUser(username, password string, updatePassword bool, isAdmin b
 		}
 	}
 
+	// Resolve the localized name of the Administrators group
+	groupName := "Administrators" // Fallback default
+	psCmd := `([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]`
+	if out, err := exec.Command("powershell", "-NoProfile", "-Command", psCmd).Output(); err == nil {
+		if name := strings.TrimSpace(string(out)); name != "" {
+			groupName = name
+		}
+	}
+
 	if isAdmin {
-		_ = exec.Command("net", "localgroup", "Administrators", username, "/add").Run()
+		_ = exec.Command("net", "localgroup", groupName, username, "/add").Run()
 	} else {
-		_ = exec.Command("net", "localgroup", "Administrators", username, "/delete").Run()
+		_ = exec.Command("net", "localgroup", groupName, username, "/delete").Run()
 	}
 
 	return nil
