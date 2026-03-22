@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/svcman"
 	"tunnelbypass/core/transports/hysteria"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
@@ -25,9 +26,6 @@ func findInstalledService() string {
 }
 
 func findInstalledServices() []string {
-	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return nil
-	}
 
 	candidates := []string{
 		"TunnelBypass-VLESS",
@@ -154,6 +152,9 @@ func serviceExists(name string) bool {
 	if name == "" {
 		return false
 	}
+	if svcman.UserSupervisorInstalled(installer.GetBaseDir(), name) {
+		return true
+	}
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command("sc", "query", name)
 		return cmd.Run() == nil
@@ -168,6 +169,9 @@ func serviceExists(name string) bool {
 func serviceRunning(name string) bool {
 	if name == "" {
 		return false
+	}
+	if svcman.UserSupervisorRunning(installer.GetBaseDir(), name) {
+		return true
 	}
 	if runtime.GOOS == "windows" {
 		out, err := exec.Command("sc", "query", name).CombinedOutput()

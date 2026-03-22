@@ -105,6 +105,23 @@ func lookupPortOwner(port int) (proc string, pid int) {
 			proc = rest[:j]
 		}
 	}
+
+	// Fallback for netstat output: tcp 0 0 0.0.0.0:443 0.0.0.0:* LISTEN 1234/xray
+	if proc == "" && pid == 0 {
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			last := fields[len(fields)-1] // e.g. "1234/xray"
+			if idx := strings.IndexByte(last, '/'); idx > 0 {
+				pidStr := last[:idx]
+				procStr := last[idx+1:]
+				if p, err := strconv.Atoi(pidStr); err == nil {
+					pid = p
+					proc = procStr
+					// Sometimes proc has a trailing colon or dash, clean it up if needed.
+				}
+			}
+		}
+	}
 	return proc, pid
 }
 
@@ -161,8 +178,12 @@ func inferOSServiceName(requestedTransport, processName, runningTransport string
 		return "TunnelBypass-WSS"
 	case strings.Contains(pl, "stunnel"):
 		return "TunnelBypass-SSL"
-	case strings.Contains(pl, "wireguard") || strings.Contains(pl, "boringtun"):
+	case strings.Contains(pl, "wireguard") || strings.Contains(pl, "boringtun") || strings.Contains(pl, "wg-quick"):
 		return "TunnelBypass-WireGuard"
+	case strings.Contains(pl, "tunnelbypass"):
+		if requestedTransport != "" {
+			return OSServiceNameForTransport(requestedTransport)
+		}
 	}
 	return ""
 }
@@ -173,11 +194,11 @@ func osStopServiceHint(serviceName string) string {
 	}
 	switch runtime.GOOS {
 	case "windows":
-		return fmt.Sprintf("[+] Stop the TunnelBypass Windows service (open cmd as Administrator if access denied):\nsc stop %s", serviceName)
+		return fmt.Sprintf("[+] Stop the background service manually (Administrator cmd):\n     sc stop %s", serviceName)
 	case "linux":
-		return fmt.Sprintf("[+] Stop the systemd service:\nsudo systemctl stop %s", serviceName)
+		return fmt.Sprintf("[+] Stop the background service manually (if using systemd):\n     sudo systemctl stop %s", serviceName)
 	case "darwin":
-		return fmt.Sprintf("[+] Stop the background service %q (Activity Monitor or launchctl), then retry.", serviceName)
+		return "[+] Stop the background service manually (Activity Monitor or launchctl), then retry."
 	default:
 		return fmt.Sprintf("[+] Stop the service %q using your OS service manager, then retry.", serviceName)
 	}
@@ -235,7 +256,7 @@ func uninstallCLIHint(serviceName, dataDir string) string {
 	if q := quoteDataDirForDisplay(dataDir); q != "" {
 		line += " --data-dir " + q
 	}
-	return "[+] Uninstall service and remove TunnelBypass config files (use Administrator cmd on Windows if access denied):\n" + line
+	return "[+] Remove the conflicting service and free the port (Smart Cross-Platform Method):\n     " + line
 }
 
 func killProcessLastResortHint(c PortConflict) string {
@@ -265,15 +286,27 @@ func buildSuggestions(c PortConflict, commandHint string, dataDir string) []stri
 	if commandHint == "" {
 		commandHint = "tunnelbypass run --type " + c.Transport
 	}
-	if hint := osStopServiceHint(c.OSServiceName); hint != "" {
-		out = append(out, hint)
+
+	// Smart Hint #1: Unified Uninstall
+	sName := c.OSServiceName
+	if sName == "" && c.RunningTransport != "" {
+		sName = OSServiceNameForTransport(c.RunningTransport)
 	}
-	if hint := uninstallCLIHint(c.OSServiceName, dataDir); hint != "" {
-		out = append(out, hint)
+	if sName == "" && c.Transport != "" {
+		sName = OSServiceNameForTransport(c.Transport)
 	}
-	out = append(out, fmt.Sprintf("[+] Try another port:\n%s --port %d", commandHint, port2))
-	out = append(out, "[+] See what TunnelBypass recorded:\ntunnelbypass status")
-	if c.RunningTransport == "" && c.OSServiceName == "" {
+
+	if sName != "" {
+		out = append(out, uninstallCLIHint(sName, dataDir))
+		if hint := osStopServiceHint(sName); hint != "" {
+			out = append(out, hint)
+		}
+	}
+
+	out = append(out, fmt.Sprintf("[+] Try another port (Quick Fix):\n     %s --port %d", commandHint, port2))
+	out = append(out, "[+] Check current status:\n     tunnelbypass status")
+
+	if c.RunningTransport == "" && sName == "" {
 		out = append(out, portInspectHint(c.Port))
 	}
 	if hint := killProcessLastResortHint(c); hint != "" {

@@ -65,7 +65,11 @@ For a `v1.2.0` release (or `$(git describe --tags --abbrev=0 || echo v0.0.0)` fo
 | OS | Suggested Filename | Contents |
 |----|--------------------|----------|
 | Linux (amd64) | `tunnelbypass_v1.2.0_linux_amd64.tar.gz` | `tunnelbypass` (executable) |
+| Linux (arm64) | `tunnelbypass_v1.2.0_linux_arm64.tar.gz` | `tunnelbypass` (executable) |
 | Windows (amd64) | `tunnelbypass_v1.2.0_windows_amd64.exe` | `tunnelbypass.exe` (executable) |
+| Windows (arm64) | `tunnelbypass_v1.2.0_windows_arm64.exe` | `tunnelbypass.exe` (executable) |
+| macOS (Intel) | `tunnelbypass_v1.2.0_darwin_amd64.tar.gz` | `tunnelbypass` (executable) |
+| macOS (Apple Silicon)| `tunnelbypass_v1.2.0_darwin_arm64.tar.gz` | `tunnelbypass` (executable) |
 
 Example `gh release` command to create a release and upload assets:
 
@@ -73,7 +77,11 @@ Example `gh release` command to create a release and upload assets:
 VERSION=$(git describe --tags --abbrev=0 || echo v0.0.0)
 gh release create $VERSION \
   tunnelbypass_${VERSION}_linux_amd64.tar.gz#"TunnelBypass for Linux (AMD64)" \
+  tunnelbypass_${VERSION}_linux_arm64.tar.gz#"TunnelBypass for Linux (ARM64)" \
   tunnelbypass_${VERSION}_windows_amd64.exe#"TunnelBypass for Windows (AMD64)" \
+  tunnelbypass_${VERSION}_windows_arm64.exe#"TunnelBypass for Windows (ARM64)" \
+  tunnelbypass_${VERSION}_darwin_amd64.tar.gz#"TunnelBypass for macOS (Intel)" \
+  tunnelbypass_${VERSION}_darwin_arm64.tar.gz#"TunnelBypass for macOS (Apple Silicon)" \
   --title "Release $VERSION" --notes "See CHANGELOG.md for details."
 ```
 
@@ -100,9 +108,19 @@ if ($asset.name -match '\.zip$') {
 
 ```bash
 OWNER=abdelrahman30x REPO=TunnelBypass
+
+# Pick a pattern based on architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+  aarch64|arm64) PAT='linux.*arm64' ;;
+  x86_64|amd64)  PAT='linux.*amd64' ;;
+  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
 URL=$(curl -fsSL "https://api.github.com/repos/${OWNER}/${REPO}/releases/latest" | \
-  grep "browser_download_url" | grep -i "linux.*amd64" | head -1 | cut -d '"' -f 4)
-test -n "$URL" || { echo "No linux/amd64 asset found; check the releases page." >&2; exit 1; }
+  grep "browser_download_url" | grep -iE "$PAT" | head -1 | cut -d '"' -f 4)
+test -n "$URL" || { echo "No $PAT asset found; check the releases page." >&2; exit 1; }
+
 curl -fsSL -o tb-download "$URL"
 case "$URL" in
   *.tar.gz|*.tgz) tar -xzf tb-download && rm -f tb-download ;;

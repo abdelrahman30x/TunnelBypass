@@ -109,3 +109,16 @@ func (m *userSupervisorManager) Remove(name string) error {
 	_ = RemovePIDFile(m.deps.BaseDir(), name)
 	return nil
 }
+
+// UserSupervisorInstalled checks if a user-mode supervisor manifest exists.
+func UserSupervisorInstalled(baseDir, name string) bool {
+	path := filepath.Join(runtimeenv.RunDir(baseDir), sanitizeName(name)+".json")
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// UserSupervisorRunning checks if a user-mode supervisor PID is active.
+func UserSupervisorRunning(baseDir, name string) bool {
+	pid := TryReadPIDFile(baseDir, name)
+	return pid > 0 && IsPIDAlive(pid)
+}
