@@ -55,8 +55,8 @@ For a `v1.2.0` release (or `$(git describe --tags --abbrev=0 || echo v0.0.0)` fo
 
 | OS | Suggested Filename | Contents |
 |----|--------------------|----------|
-| Linux (amd64) | `tunnelbypass_1.2.0_linux_amd64.tar.gz` | `tunnelbypass` (executable) |
-| Windows (amd64) | `tunnelbypass_1.2.0_windows_amd64.exe` | `tunnelbypass.exe` (executable) |
+| Linux (amd64) | `tunnelbypass_v1.2.0_linux_amd64.tar.gz` | `tunnelbypass` (executable) |
+| Windows (amd64) | `tunnelbypass_v1.2.0_windows_amd64.exe` | `tunnelbypass.exe` (executable) |
 
 Example `gh release` command to create a release and upload assets:
 

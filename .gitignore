@@ -9,6 +9,7 @@
 tunnelbypass.exe
 tunnelbypass
 client.exe
+tunnelbypass_v*
 
 # Scratch / debug files
 build_errors.txt
