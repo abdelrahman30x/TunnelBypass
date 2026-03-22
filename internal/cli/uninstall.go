@@ -30,6 +30,10 @@ func runUninstallCLI(args []string) {
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
+	pos := fs.Args()
+	if *typ == "" && len(pos) > 0 {
+		*typ = pos[0]
+	}
 	serviceName := strings.TrimSpace(*svc)
 	if serviceName == "" && strings.TrimSpace(*typ) != "" {
 		serviceName = portable.OSServiceNameForTransport(*typ)

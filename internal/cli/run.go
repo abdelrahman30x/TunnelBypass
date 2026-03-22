@@ -63,8 +63,9 @@ func executeRun(rawArgs []string) int {
 	noElevate := fs.Bool("no-elevate", false, "Do not auto-elevate to Administrator/root for OS service install and firewall (user-mode only); override TB_NO_ELEVATE")
 	autoStart := fs.Bool("auto-start", true, "Start transport after generation")
 
-	_ = fs.Parse(rawArgs)
-	posArgs, portableWord := stripPortableToken(fs.Args())
+	argsForFs, portableWord := stripPortableToken(rawArgs)
+	_ = fs.Parse(argsForFs)
+	posArgs := fs.Args()
 
 	var specFile cfg.SpecFile
 	if strings.TrimSpace(*specPath) != "" {

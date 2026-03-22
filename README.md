@@ -159,7 +159,7 @@ Wizard order and rough DPI-bypass strength (more stars ≈ stronger camouflage o
 |   |           |   |                                                                  |
 
 **Portable Mode** (No elevation, no service install, same session):
-`./tunnelbypass run portable <any_transport>`
+`./tunnelbypass run portable <transport_name> [flags]`
 
 ## Docker
 
@@ -192,7 +192,9 @@ tunnelbypass xray-svc | hysteria-svc | udpgw-svc   # service helpers
 ```bash
 tunnelbypass run ssh
 tunnelbypass run --daemon ssh
-tunnelbypass run portable <transport> # execute directly, skipping service/UAC elevation
+tunnelbypass run portable reality --port 443 --sni example.com --uuid auto
+# Or use the transport name directly as the first argument after 'portable'
+tunnelbypass run portable ssh
 tunnelbypass run --data-dir /data --type reality --port 443 --sni example.com --uuid auto --dry-run
 ```
 
