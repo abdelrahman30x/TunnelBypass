@@ -148,7 +148,10 @@ Wizard order and rough DPI-bypass strength (more stars ≈ stronger camouflage o
 | 4 | QUIC (Hysteria v2) | ★★ | `./tunnelbypass run --type hysteria --port 443 --sni epicgames.com --uuid auto` |
 | 5 | SSH | ★★ | `./tunnelbypass run ssh` |
 | 6 | WireGuard | ★ | `./tunnelbypass run --type wireguard --port 51820 --sni example.com` |
-| — | **Portable Mode** | — | `./tunnelbypass run portable <any_transport>` <br> (No elevation, no service install, same session) |
+|   |           |   |                                                                  |
+
+**Portable Mode** (No elevation, no service install, same session):
+`./tunnelbypass run portable <any_transport>`
 
 ## Docker
 
