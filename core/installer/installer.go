@@ -412,7 +412,7 @@ func (p *XrayServiceWrapper) run() {
 
 		if err := ValidateTunnelConfigFile(absConfig); err != nil {
 			log.Error("config validation failed", "path", absConfig, "err", err,
-				"hint", "fix JSON/YAML or restore from backup; see STABILITY.md")
+				"hint", "fix JSON/YAML or restore from backup")
 			line := fmt.Sprintf("[%s] config error: %v\n", time.Now().Format(time.RFC3339), err)
 			if logFile != nil {
 				_, _ = logFile.WriteString(line)

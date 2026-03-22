@@ -33,10 +33,10 @@ On Windows without `make`, use `scripts/build.ps1`. Requires **Go 1.25+** (`go.m
 
 ## Elevation and portable mode
 
-**Note:** UAC/sudo re-exec, `TB_PORTABLE`, `TB_DATA_DIR`, Docker, and service installs are documented in [STABILITY.md](STABILITY.md). Prefer that file for edge cases instead of duplicating detail here.
+**Note:** UAC/sudo may re-exec for elevation; `TB_PORTABLE`, `TB_DATA_DIR`, Docker, and service installs affect layout and permissions.
 
 - Non-portable `run` for service-capable transports may elevate once so WinSW/systemd and firewall rules can run; use `--no-elevate`, `TB_NO_ELEVATE=1`, or `run portable` to stay in the current session.
-- `TB_PORTABLE=1` and `TB_DATA_DIR` select user-writable layout (see STABILITY for full env table).
+- `TB_PORTABLE=1` and `TB_DATA_DIR` select a user-writable data layout.
 
 ## Direct download (releases)
 
@@ -55,7 +55,7 @@ Repo: [https://github.com/abdelrahman30x/TunnelBypass](https://github.com/abdelr
 
 Image uses non-root user, `TB_DATA_DIR=/data`, `TB_PORTABLE=1`, default `TB_LOG=json`. Map ports your transport needs.
 
-**Note:** Prefer `docker run ... tunnelbypass:local run <transport>`; wizard service installs are unreliable in containers. Details: [STABILITY.md](STABILITY.md).
+**Note:** Prefer `docker run ... tunnelbypass:local run <transport>`; wizard service installs are unreliable in containers.
 
 ```bash
 docker build -t tunnelbypass:local .
@@ -77,7 +77,7 @@ tunnelbypass deps-tree [--mermaid] <transport>
 tunnelbypass xray-svc | hysteria-svc | udpgw-svc   # service helpers
 ```
 
-**Portable / CI:** `TB_LOG=json`, exit codes, dependency order, and `--install-service` limits are summarized in [STABILITY.md](STABILITY.md).
+**Portable / CI:** use `TB_LOG=json` for structured logs; see `tunnelbypass run -help` for flags, exit behavior, dependency order, and `--install-service`.
 
 ```bash
 tunnelbypass run ssh
@@ -132,14 +132,6 @@ Default `run` uses the per-user portable-style base unless `--system-data` or `p
 ## Clients
 
 v2rayN / NekoBox / Sing-Box (VLESS, Hysteria); WireGuard app (`.conf`); SSH clients for plain / TLS / WSS. Self-signed TLS paths: allow insecure in the client.
-
-## Project docs
-
-| Doc | Purpose |
-|-----|---------|
-| [CHANGELOG.md](CHANGELOG.md) | Releases |
-| [VERSIONING.md](VERSIONING.md) | Semver |
-| [STABILITY.md](STABILITY.md) | Env vars, limits, elevation, containers |
 
 ## License
 
