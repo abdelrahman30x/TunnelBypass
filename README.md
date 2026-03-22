@@ -140,19 +140,7 @@ v2rayN / NekoBox / Sing-Box (VLESS, Hysteria); WireGuard app (`.conf`); SSH clie
 | [CHANGELOG.md](CHANGELOG.md) | Releases |
 | [VERSIONING.md](VERSIONING.md) | Semver |
 | [STABILITY.md](STABILITY.md) | Env vars, limits, elevation, containers |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | PRs; **start with [Quick reference](CONTRIBUTING.md#quick-reference)** |
 
-## Contributing / license
-
-PR style and examples: [CONTRIBUTING.md](CONTRIBUTING.md#quick-reference).
-
-```go
-// Bad
-// GetBaseDir returns the standardized installation directory for TunnelBypass.
-
-// Good
-// Install root: TB_DATA_DIR, portable, override, or OS default.
-func GetBaseDir() string { ... }
-```
+## License
 
 [MIT](LICENSE).
