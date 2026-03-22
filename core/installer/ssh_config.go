@@ -1,13 +1,11 @@
 package installer
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 func systemDriveRoot() string {
@@ -76,20 +74,11 @@ func EnsureSaneSSHConfig() {
 	if SSHEmbedActive() {
 		return
 	}
-	configPath := GetSystemSSHDConfigPath()
-	content := []string{
-		"Port 22",
-		"ListenAddress 0.0.0.0",
-		"PasswordAuthentication yes",
-		"PubkeyAuthentication yes",
-		"ChallengeResponseAuthentication no",
-		"PrintMotd no",
-		"AcceptEnv LANG LC_*",
-		"",
-		"# TunnelBypass Managed Config",
+	// No longer overwriting the entire file.
+	// We only ensure basic password/pubkey auth is allowed for the system if we are root.
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		return
 	}
-	_ = os.WriteFile(configPath, []byte(strings.Join(content, "\r\n")), 0644)
-	_ = RestartSSHD()
 }
 
 func EnsureManagedSSHConfig(username string) {
@@ -99,45 +88,8 @@ func EnsureManagedSSHConfig(username string) {
 	if username == "" {
 		return
 	}
-	configPath := GetSystemSSHDConfigPath()
-	bannerPath := GetSystemSSHBannerPath()
-	u := strings.TrimSpace(username)
-	if u == "" {
-		return
-	}
-	if old, err := os.ReadFile(configPath); err == nil && len(old) > 0 {
-		backupPath := configPath + ".tunnelbypass.bak"
-		if _, statErr := os.Stat(backupPath); statErr == nil {
-			backupPath = fmt.Sprintf("%s.tunnelbypass.%d.bak", configPath, time.Now().Unix())
-		}
-		_ = os.WriteFile(backupPath, old, 0644)
-	}
-	content := []string{
-		"Port 22",
-		"ListenAddress 0.0.0.0",
-		"PasswordAuthentication yes",
-		"PubkeyAuthentication yes",
-		"ChallengeResponseAuthentication no",
-		"UsePAM no",
-		"PrintMotd no",
-		"AcceptEnv LANG LC_*",
-		"Banner " + bannerPath,
-		"",
-		"AllowUsers " + u,
-		"",
-		"Match User " + u,
-		"\tPasswordAuthentication yes",
-		"\tPermitTTY no",
-		"\tX11Forwarding no",
-		"\tAllowAgentForwarding no",
-		"\tAllowTcpForwarding yes",
-		"\tAllowStreamLocalForwarding no",
-		"\tPermitTunnel no",
-		"",
-		"# TunnelBypass Managed Config",
-	}
-	_ = os.WriteFile(configPath, []byte(strings.Join(content, "\r\n")), 0644)
-	_ = RestartSSHD()
+	// Use the safe snippet-based logic instead of overwriting the whole file.
+	EnsureSSHUserOnly(username)
 }
 
 func EnsureSSHUserOnly(username string) {

@@ -35,9 +35,6 @@ func EnsureSshStunnelServer(sslPort int, username, password string, updatePasswo
 		if err := EnsureWindowsUser(username, password, updatePassword, isAdmin); err != nil {
 			fmt.Printf("    [!] Warning: Windows user creation failed: %v\n", err)
 		}
-		EnsureManagedSSHConfig(username)
-	} else {
-		EnsureSaneSSHConfig()
 	}
 
 	if err := EnsureSSHServerWithAuth(username, password); err != nil {

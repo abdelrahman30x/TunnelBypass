@@ -60,9 +60,10 @@ func shouldTryPackageOpenSSH() bool {
 // EnsureSSHServerWithAuth ensures SSH is reachable: system OpenSSH when possible, else embedded server.
 // Username/password are used for embedded mode; empty password triggers a generated password file under configs/ssh.
 func EnsureSSHServerWithAuth(username, password string) error {
+	// If port 22 is busy, we assume it's the system SSH. 
+	// To avoid lockout or conflict, we MUST use the embedded server on a different port.
 	if PortListening(22) {
-		useSystemSSHBackend()
-		return nil
+		return startEmbeddedSSHServer(username, password)
 	}
 
 	mode := sshServerMode()
@@ -72,13 +73,25 @@ func EnsureSSHServerWithAuth(username, password string) error {
 		if err != nil {
 			return err
 		}
+		// Only configure system SSH if we are root/admin.
+		if username != "" {
+			EnsureManagedSSHConfig(username)
+		} else {
+			EnsureSaneSSHConfig()
+		}
 		useSystemSSHBackend()
 		return nil
 	case "embed", "embedded":
 		return startEmbeddedSSHServer(username, password)
 	default: // auto
+		// If port 22 was free, we can try to install system SSH only if we are root.
 		if shouldTryPackageOpenSSH() {
 			if err := ensureOpenSSHServerInstall(); err == nil && PortListening(22) {
+				if username != "" {
+					EnsureManagedSSHConfig(username)
+				} else {
+					EnsureSaneSSHConfig()
+				}
 				useSystemSSHBackend()
 				return nil
 			}
