@@ -14,10 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+const maxConcurrentSessions = 20
 
 // Config holds listen address and credentials.
 type Config struct {
@@ -130,10 +133,20 @@ func handleConn(ctx context.Context, conn net.Conn, cfg *ssh.ServerConfig, log *
 	defer sshConn.Close()
 	go ssh.DiscardRequests(reqs)
 
+	var activeSessions int32
+ 
 	for newCh := range chans {
 		switch newCh.ChannelType() {
 		case "session":
-			go handleSession(newCh, log)
+			if atomic.LoadInt32(&activeSessions) >= maxConcurrentSessions {
+				_ = newCh.Reject(ssh.ResourceShortage, "too many sessions")
+				continue
+			}
+			atomic.AddInt32(&activeSessions, 1)
+			go func(ch ssh.NewChannel) {
+				defer atomic.AddInt32(&activeSessions, -1)
+				handleSession(ch, log)
+			}(newCh)
 		case "direct-tcpip":
 			go handleDirectTCPIP(ctx, newCh, log)
 		default:

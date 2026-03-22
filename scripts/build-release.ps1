@@ -55,11 +55,19 @@ foreach ($t in $Targets) {
     # Package
     if ($os -ne "windows") {
         # Use native Windows 10+ tar for .tar.gz creation
-        tar -czf $assetName $binName
-        Remove-Item $binName -Force
+        if (Test-Path $binName) {
+            tar -czf $assetName $binName
+            Remove-Item $binName -Force
+        } else {
+            Write-Warning "Binary $binName not found, skipping packaging for $os/$arch"
+        }
     } else {
         if (Test-Path $assetName) { Remove-Item $assetName -Force }
-        Rename-Item -Path $binName -NewName $assetName -Force
+        if (Test-Path $binName) {
+            Rename-Item -Path $binName -NewName $assetName -Force
+        } else {
+            Write-Warning "Binary $binName not found, skipping packaging for $os/$arch"
+        }
     }
 }
 

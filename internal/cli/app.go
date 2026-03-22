@@ -263,7 +263,7 @@ func printUsage() {
 	fmt.Println("  TB_XRAY_VERSION / TB_HYSTERIA_VERSION / TB_WSTUNNEL_VERSION  Pin downloaded binaries")
 	fmt.Println("  TB_*_MIRROR_URLS  Comma-separated fallback download URLs (Xray/Hysteria)")
 	fmt.Println("  TB_BIN_FORCE_REFRESH=1  Delete cached binary and re-download on next ensure")
-	fmt.Println("  TB_EMBED_SOCKS5=127.0.0.1:1080  Optional TCP SOCKS5 with embedded SSH")
+	fmt.Println("  TB_EMBED_SOCKS5=127.0.0.1:1080  Optional TCP SOCKS5 (WARNING: No Auth! Use 127.0.0.1 only)")
 	fmt.Println("  TB_PORTABLE=1  Prefer portable data directory in installers/detect")
 	fmt.Println("  TB_UDPGW_MODE=auto|internal|external")
 	fmt.Println("  TB_UDPGW_BINARY=path  External badvpn-udpgw-compatible binary (auto mode)")
