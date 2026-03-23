@@ -144,10 +144,10 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	sshDisabled := formatDisabled("ssh")
 	wireguardDisabled := formatDisabled("wireguard")
 	fmt.Printf("    1) %sReality / XTLS%s%s -> %s★★★★★%s\n", ColorGreen, ColorReset, colorForDisabled("reality")+realityDisabled, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    2) %sWSS (wstunnel)%s  %s%s\n", ColorCyan, ColorReset, colorForDisabled("wss")+wssDisabled, ColorReset)
-	fmt.Printf("    3) %sTLS (stunnel)%s   %s%s\n", ColorGray, ColorReset, colorForDisabled("tls")+tlsDisabled, ColorReset)
+	fmt.Printf("    2) %sWSS (wstunnel)%s%s  -> %s★★★%s\n", ColorCyan, ColorReset, colorForDisabled("wss")+wssDisabled, ColorYellow+ColorBold, ColorReset)
+	fmt.Printf("    3) %sTLS (stunnel)%s%s   -> %s★★★%s\n", ColorGray, ColorReset, colorForDisabled("tls")+tlsDisabled, ColorYellow+ColorBold, ColorReset)
 	fmt.Printf("    4) %sQUIC (Hysteria v2)%s%s -> %s★★%s\n", ColorMagenta, ColorReset, colorForDisabled("hysteria")+hysteriaDisabled, ColorBlue+ColorBold, ColorReset)
-	fmt.Printf("    5) %sSSH%s             %s%s\n", ColorGray+ColorBold, ColorReset, colorForDisabled("ssh")+sshDisabled, ColorReset)
+	fmt.Printf("    5) %sSSH%s%s             -> %s★★%s\n", ColorGray+ColorBold, ColorReset, colorForDisabled("ssh")+sshDisabled, ColorYellow+ColorBold, ColorReset)
 	fmt.Printf("    6) %sWireGuard%s%s -> %s★%s\n", ColorBlue, ColorReset, colorForDisabled("wireguard")+wireguardDisabled, ColorGray+ColorBold, ColorReset)
 	fmt.Printf("    %sb)%s %sBack to Main Menu%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 
