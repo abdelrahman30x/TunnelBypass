@@ -54,7 +54,7 @@ func executeRun(rawArgs []string) int {
 	sshPass := fs.String("ssh-password", "", "SSH password")
 	typeFlag := fs.String("type", "", "Transport name (optional if positional or spec sets it)")
 	specPath := fs.String("spec", "", "JSON or YAML run spec file")
-	sniFlag := fs.String("sni", "", "SNI / tunnel hostname (Reality, Hysteria, WSS, TLS)")
+	sniFlag := fs.String("sni", "", "SNI / tunnel hostname (Reality, Hysteria; WSS/TLS are disabled)")
 	serverFlag := fs.String("server", "", "Server public address for clients (default: detect public IP)")
 	uuidFlag := fs.String("uuid", "", "UUID or auth secret; use 'auto' to generate")
 	portFlag := fs.Int("port", 0, "Listen port (transport-specific default if 0)")

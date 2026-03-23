@@ -138,10 +138,10 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	fmt.Printf("\n%s[1] Select Tunnel Type%s\n", ColorYellow, ColorReset)
 	fmt.Printf("    %sDPI bypass stars: more stars = better%s\n", ColorGray, ColorReset)
 	fmt.Printf("    1) %sReality / XTLS%s -> %s★★★★★%s\n", ColorGreen, ColorReset, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    2) %sWSS (wstunnel)%s -> %s★★★★%s\n", ColorCyan, ColorReset, ColorGreen+ColorBold, ColorReset)
-	fmt.Printf("    3) %sTLS (stunnel)%s -> %s★★★%s\n", ColorGray, ColorReset, ColorCyan+ColorBold, ColorReset)
+	fmt.Printf("    2) %sWSS (wstunnel)%s  %s(DISABLED)%s\n", ColorCyan, ColorReset, ColorRed, ColorReset)
+	fmt.Printf("    3) %sTLS (stunnel)%s   %s(DISABLED)%s\n", ColorGray, ColorReset, ColorRed, ColorReset)
 	fmt.Printf("    4) %sQUIC (Hysteria v2)%s -> %s★★%s\n", ColorMagenta, ColorReset, ColorBlue+ColorBold, ColorReset)
-	fmt.Printf("    5) %sSSH%s -> %s★★%s\n", ColorGray+ColorBold, ColorReset, ColorMagenta+ColorBold, ColorReset)
+	fmt.Printf("    5) %sSSH%s             %s(DISABLED)%s\n", ColorGray+ColorBold, ColorReset, ColorRed, ColorReset)
 	fmt.Printf("    6) %sWireGuard%s -> %s★%s\n", ColorBlue, ColorReset, ColorGray+ColorBold, ColorReset)
 	fmt.Printf("    %sb)%s %sBack to Main Menu%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 
@@ -231,6 +231,13 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	transport := wizardChoiceToTransport(choice)
 	if transport == "" {
 		fmt.Printf("%sInvalid choice.%s\n", ColorRed, ColorReset)
+		return false
+	}
+
+	if cfg.IsDisabled(transport) {
+		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled for maintenance due to known bugs.%s\n", ColorRed, transport, ColorReset)
+		fmt.Printf("    %sPlease choose another protocol like Reality (1) or WireGuard (6).%s\n", ColorGray, ColorReset)
+		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to selection...%s", ColorGray, ColorReset))
 		return false
 	}
 

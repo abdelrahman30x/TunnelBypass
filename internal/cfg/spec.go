@@ -141,6 +141,15 @@ func NormalizeTransport(t string) string {
 	}
 }
 
+func IsDisabled(t string) bool {
+	switch NormalizeTransport(t) {
+	case "ssh", "wss", "tls":
+		return true
+	default:
+		return false
+	}
+}
+
 func RunnerTransportFor(t string) string {
 	switch NormalizeTransport(t) {
 	case "reality":
@@ -207,6 +216,9 @@ func FillDefaults(s *RunSpec) {
 func Validate(s RunSpec) error {
 	if s.Transport == "" {
 		return fmt.Errorf("transport is required")
+	}
+	if IsDisabled(s.Transport) {
+		return fmt.Errorf("transport %q is temporarily disabled due to ongoing maintenance/bugs", s.Transport)
 	}
 	if _, err := portable.Get(RunnerTransportFor(s.Transport)); err != nil {
 		return fmt.Errorf("unknown transport %q", s.Transport)
