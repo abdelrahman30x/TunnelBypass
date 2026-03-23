@@ -144,7 +144,7 @@ func NormalizeTransport(t string) string {
 func IsDisabled(t string) bool {
 	switch NormalizeTransport(t) {
 	case "ssh", "wss", "tls":
-		return true
+		return false
 	default:
 		return false
 	}

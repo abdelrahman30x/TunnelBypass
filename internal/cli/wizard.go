@@ -138,10 +138,13 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	fmt.Printf("\n%s[1] Select Tunnel Type%s\n", ColorYellow, ColorReset)
 	fmt.Printf("    %sDPI bypass stars: more stars = better%s\n", ColorGray, ColorReset)
 	fmt.Printf("    1) %sReality / XTLS%s -> %s★★★★★%s\n", ColorGreen, ColorReset, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    2) %sWSS (wstunnel)%s  %s(DISABLED)%s\n", ColorCyan, ColorReset, ColorRed, ColorReset)
-	fmt.Printf("    3) %sTLS (stunnel)%s   %s(DISABLED)%s\n", ColorGray, ColorReset, ColorRed, ColorReset)
+	wssDisabled := formatDisabled("wss")
+	tlsDisabled := formatDisabled("tls")
+	sshDisabled := formatDisabled("ssh")
+	fmt.Printf("    2) %sWSS (wstunnel)%s  %s%s%s\n", ColorCyan, ColorReset, colorForDisabled("wss"), wssDisabled, ColorReset)
+	fmt.Printf("    3) %sTLS (stunnel)%s   %s%s%s\n", ColorGray, ColorReset, colorForDisabled("tls"), tlsDisabled, ColorReset)
 	fmt.Printf("    4) %sQUIC (Hysteria v2)%s -> %s★★%s\n", ColorMagenta, ColorReset, ColorBlue+ColorBold, ColorReset)
-	fmt.Printf("    5) %sSSH%s             %s(DISABLED)%s\n", ColorGray+ColorBold, ColorReset, ColorRed, ColorReset)
+	fmt.Printf("    5) %sSSH%s             %s%s%s\n", ColorGray+ColorBold, ColorReset, colorForDisabled("ssh"), sshDisabled, ColorReset)
 	fmt.Printf("    6) %sWireGuard%s -> %s★%s\n", ColorBlue, ColorReset, ColorGray+ColorBold, ColorReset)
 	fmt.Printf("    %sb)%s %sBack to Main Menu%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 
@@ -391,4 +394,18 @@ func wizardOverlayWindowsService(transport string) bool {
 		return false
 	}
 	return elevate.IsAdmin()
+}
+
+func formatDisabled(t string) string {
+	if cfg.IsDisabled(t) {
+		return "(DISABLED)"
+	}
+	return ""
+}
+
+func colorForDisabled(t string) string {
+	if cfg.IsDisabled(t) {
+		return ColorRed
+	}
+	return ""
 }
