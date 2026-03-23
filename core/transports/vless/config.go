@@ -40,7 +40,11 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 	}
 	hostLabel = utils.SanitizeForTag(hostLabel)
 	if hostLabel == "" {
-		email = fmt.Sprintf("TunnelBypass-%s", opt.UUID[:8])
+		uuidPart := opt.UUID
+		if len(uuidPart) > 8 {
+			uuidPart = uuidPart[:8]
+		}
+		email = fmt.Sprintf("TunnelBypass-%s", uuidPart)
 	} else {
 		email = fmt.Sprintf("TunnelBypass-%s", hostLabel)
 	}
