@@ -10,10 +10,9 @@
 #   - Other subcommands (wizard, status, hosts, ...) → passed through unchanged
 #   - A bare transport name (e.g. "ssh", "hysteria") → run --data-dir /data <args>
 #
-# Data root: set TB_DATA_DIR=/data in the image (or env) so wizard + run share /data without flags.
+# Data root: set TUNNELBYPASS_DATA_DIR=/data in the image (or use --data-dir on run).
 # Non-interactive: tunnelbypass run --data-dir /data --spec /data/spec.yaml <transport>
-# Ports: configure via TB_* and CLI flags only; nothing is fixed in the Dockerfile.
-# Logs: TB_LOG=json by default in the Dockerfile; override with -e TB_LOG=text
+# Ports: configure via CLI flags; nothing is fixed in the Dockerfile.
 
 set -e
 bin=/usr/local/bin/tunnelbypass

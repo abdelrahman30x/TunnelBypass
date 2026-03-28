@@ -4,12 +4,11 @@ package supervisor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"sync/atomic"
 	"time"
+	"tunnelbypass/internal/utils"
 )
 
 // ExitKind classifies why a supervised process stopped.
@@ -27,7 +26,7 @@ type Policy struct {
 	InitialBackoff time.Duration // default 2s
 	MaxBackoff     time.Duration // default 2m
 	// MaxCrashLoops stops restart after this many consecutive "short" crashes (0 = unlimited).
-	MaxCrashLoops int // default from env TB_SVC_MAX_CRASH_LOOPS or 12
+	MaxCrashLoops int // default 12
 	// Runs shorter than this duration count as crash-loop candidates (default 8s).
 	ShortRun time.Duration
 	// InitialDelays, if non-empty, are used as sleep durations before the 1st, 2nd, ... restart (before exponential backoff).
@@ -36,25 +35,14 @@ type Policy struct {
 	OnScheduledRestart func(restartCount uint64)
 }
 
-// Default restart/backoff policy; TB_SVC_MAX_CRASH_LOOPS overrides crash cap.
+// Default restart/backoff policy.
 func DefaultPolicy() Policy {
-	p := Policy{
+	return Policy{
 		InitialBackoff: 2 * time.Second,
 		MaxBackoff:     2 * time.Minute,
 		MaxCrashLoops:  12,
 		ShortRun:       8 * time.Second,
 	}
-	if v := os.Getenv("TB_SVC_MAX_CRASH_LOOPS"); v != "" {
-		var n int
-		if _, err := fmt.Sscanf(v, "%d", &n); err == nil {
-			if n == 0 {
-				p.MaxCrashLoops = 0 // unlimited
-			} else if n > 0 {
-				p.MaxCrashLoops = n
-			}
-		}
-	}
-	return p
 }
 
 // Exponential backoff delay before the next restart, capped by policy.
@@ -166,7 +154,7 @@ func Loop(ctx context.Context, log *slog.Logger, p Policy, m *Metrics, fn func(a
 					"consecutive_short_runs", shortStreak,
 					"threshold", p.ShortRun,
 					"limit", p.MaxCrashLoops,
-					"hint", "fix config or binary, then restart the service or run tunnelbypass xray-svc manually")
+					"hint", "fix config or binary, then restart the service or run "+utils.AppName()+" xray-svc manually")
 				return
 			}
 		}

@@ -54,10 +54,6 @@ func EnsureBinary(name string) (string, error) {
 	exeName := binmgr.ExecutableFilename(name)
 	targetPath := filepath.Join(binDir, exeName)
 
-	if os.Getenv("TB_BIN_FORCE_REFRESH") == "1" {
-		_ = os.Remove(targetPath)
-	}
-
 	if _, err := os.Stat(targetPath); err == nil {
 		if name == "wstunnel" && !isWstunnelVersionUsable(targetPath) {
 			_ = os.Remove(targetPath)
@@ -193,16 +189,7 @@ func buildXrayZipURL(ver string) string {
 
 func getXrayDownloadURLs() []string {
 	ver := EffectiveXrayVersion()
-	out := []string{buildXrayZipURL(ver)}
-	if m := strings.TrimSpace(os.Getenv("TB_XRAY_MIRROR_URLS")); m != "" {
-		for _, u := range strings.Split(m, ",") {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				out = append(out, u)
-			}
-		}
-	}
-	return out
+	return []string{buildXrayZipURL(ver)}
 }
 
 func buildHysteriaURL(ver string) string {
@@ -217,16 +204,7 @@ func buildHysteriaURL(ver string) string {
 
 func getHysteriaDownloadURLs() []string {
 	ver := EffectiveHysteriaVersion()
-	out := []string{buildHysteriaURL(ver)}
-	if m := strings.TrimSpace(os.Getenv("TB_HYSTERIA_MIRROR_URLS")); m != "" {
-		for _, u := range strings.Split(m, ",") {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				out = append(out, u)
-			}
-		}
-	}
-	return out
+	return []string{buildHysteriaURL(ver)}
 }
 
 func getWstunnelDownloadURLs() []string {
@@ -540,11 +518,14 @@ func ensureStunnelBinary(binDir, targetPath string) error {
 		{"yum", "install", "-y", "stunnel"},
 		{"dnf", "install", "-y", "stunnel"},
 		{"apk", "add", "--no-cache", "stunnel"},
+		{"pacman", "-Sy", "--noconfirm", "stunnel"},
 	} {
 		if _, err := exec.LookPath(pkg[0]); err != nil {
 			continue
 		}
-		if err := exec.Command(pkg[0], pkg[1:]...).Run(); err == nil {
+		c := exec.Command(pkg[0], pkg[1:]...)
+		c.Env = envForPkgManager(pkg[0])
+		if err := c.Run(); err == nil {
 			if p, err := exec.LookPath("stunnel"); err == nil {
 				_ = copyFile(p, targetPath, 0755)
 				return nil

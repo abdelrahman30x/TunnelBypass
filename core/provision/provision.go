@@ -223,9 +223,15 @@ func provisionWireguard(log *slog.Logger, opt types.ConfigOptions, serverOut, cl
 func provisionSSH(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	var r Result
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
-	if opt.Port == 0 {
-		opt.Port = 22
+	// Use SSHBackendPort if provided (from --ssh-port flag), otherwise use Port, use dynamic allocation if both are 0
+	if opt.SSHBackendPort > 0 {
+		opt.Port = opt.SSHBackendPort
 	}
+	if opt.Port <= 0 {
+		// Use dynamic port allocation
+		opt.Port = installer.EnsureFreeTCPPort(0, "ssh")
+	}
+	opt.SSHBackendPort = opt.Port // Ensure SSHBackendPort is set for later use
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-SSH")
 
 	if strings.TrimSpace(opt.SSHUser) == "" {
@@ -296,6 +302,9 @@ func provisionTLS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 
 func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	var r Result
+	installer.SetSSHServerForwarder(false)
+	defer installer.SetSSHServerForwarder(true)
+
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	if opt.Port == 0 {
 		opt.Port = 443
@@ -414,7 +423,6 @@ func NeedsProvision(transport string) bool {
 }
 
 func ensureSSHBackend(log *slog.Logger, opt *types.ConfigOptions) error {
-	installer.EnsureManagedSSHConfig(opt.SSHUser)
 	if err := installer.EnsureSSHServerWithAuth(opt.SSHUser, opt.SSHPassword); err != nil {
 		if log != nil {
 			log.Warn("provision: ssh server ensure", "err", err)
@@ -424,7 +432,16 @@ func ensureSSHBackend(log *slog.Logger, opt *types.ConfigOptions) error {
 	if installer.SSHEmbedActive() {
 		opt.SSHBackendPort = installer.GetSSHBackendPort()
 	} else {
-		opt.SSHBackendPort = 22
+		// Try to get port from saved config, otherwise use system SSH default
+		portCfg, _ := installer.LoadSSHPortConfig()
+		if portCfg.InternalPort > 0 {
+			opt.SSHBackendPort = portCfg.InternalPort
+		} else {
+			// Use configured SSHBackendPort if already set, else dynamic allocation
+			if opt.SSHBackendPort <= 0 {
+				opt.SSHBackendPort = installer.GetSSHBackendPort()
+			}
+		}
 	}
 	return nil
 }

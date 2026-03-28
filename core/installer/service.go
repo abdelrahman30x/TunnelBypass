@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"tunnelbypass/core/svcman"
@@ -17,10 +16,7 @@ import (
 func CreateService(name, displayName, execPath string, args []string, workingDir string) error {
 	inf := runtimeenv.Detect()
 	if inf.LikelyContainer {
-		v := strings.TrimSpace(os.Getenv("TB_ALLOW_SVC_IN_CONTAINER"))
-		if v != "1" && !strings.EqualFold(v, "true") {
-			return fmt.Errorf("container detected: service install disabled (use foreground: tunnelbypass run portable <transport>; override: TB_ALLOW_SVC_IN_CONTAINER=1)")
-		}
+		return fmt.Errorf("container detected: service install disabled (use foreground: tunnelbypass run portable <transport>)")
 	}
 	strategy := runtimeenv.ChooseStrategy(inf)
 	mgr := svcman.Resolve(inf, svcmanDeps())

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
@@ -43,7 +41,7 @@ func Load(path string) (File, error) {
 	return f, nil
 }
 
-// File fields then env onto o; CLI flags should win if applied after.
+// File fields merged onto o; CLI flags should win if applied after.
 func Merge(o portable.Options, file File) portable.Options {
 	if file.ConfigPath != "" && o.ConfigPath == "" {
 		o.ConfigPath = file.ConfigPath
@@ -64,30 +62,5 @@ func Merge(o portable.Options, file File) portable.Options {
 		o.WssPort = *file.WssPort
 	}
 
-	// Environment overrides file (TB_*).
-	if v := strings.TrimSpace(os.Getenv("TB_SSH_PORT")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			o.SSHPort = n
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_UDPGW_PORT")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			o.UDPGWPort = n
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_SSH_USER")); v != "" {
-		o.SSHUser = v
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_SSH_PASSWORD")); v != "" {
-		o.SSHPass = v
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_WSS_PORT")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			o.WssPort = n
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_PORTABLE_CONFIG")); v != "" {
-		o.ConfigPath = v
-	}
 	return o
 }

@@ -2,7 +2,6 @@ package svcinstall
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -17,8 +16,8 @@ import (
 // InstallRunTransportService registers an OS service (or user supervisor) for wizard-capable transports.
 func InstallRunTransportService(transport string, opt types.ConfigOptions, isAdmin bool) error {
 	inf := runtimeenv.Detect()
-	if inf.LikelyContainer && strings.TrimSpace(os.Getenv("TB_ALLOW_SVC_IN_CONTAINER")) == "" {
-		return fmt.Errorf("container: service install disabled (use `run portable <transport>` or TB_ALLOW_SVC_IN_CONTAINER=1)")
+	if inf.LikelyContainer {
+		return fmt.Errorf("container: service install disabled (use `run portable <transport>`)")
 	}
 	t := strings.ToLower(strings.TrimSpace(transport))
 	switch t {

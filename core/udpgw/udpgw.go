@@ -10,8 +10,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -34,7 +32,7 @@ const (
 type Options struct {
 	Port                 int
 	Mode                 Mode
-	ExternalPath         string // badvpn-udpgw or compatible; empty uses TB_UDPGW_BINARY / auto-detect
+	ExternalPath         string // badvpn-udpgw or compatible; empty auto-detects internal server
 	Logger               *slog.Logger
 	MaxConcurrentClients int
 }
@@ -61,18 +59,11 @@ var frameHdrPool = sync.Pool{
 }
 
 func ModeFromEnv() Mode {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("TB_UDPGW_MODE"))) {
-	case "internal":
-		return ModeInternal
-	case "external":
-		return ModeExternal
-	default:
-		return ModeAuto
-	}
+	return ModeAuto
 }
 
 func ExternalPathFromEnv() string {
-	return strings.TrimSpace(os.Getenv("TB_UDPGW_BINARY"))
+	return ""
 }
 
 func (o Options) logger() *slog.Logger {
@@ -85,11 +76,6 @@ func (o Options) logger() *slog.Logger {
 func maxConcurrentClients(o Options) int {
 	if o.MaxConcurrentClients > 0 {
 		return o.MaxConcurrentClients
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_UDPGW_MAX_CLIENTS")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
 	}
 	return 512
 }
@@ -128,13 +114,13 @@ func Run(ctx context.Context, o Options) error {
 		o.Port = 7300
 	}
 	mode := resolveMode(o)
-	forcedExternal := o.Mode == ModeExternal || ModeFromEnv() == ModeExternal
+	forcedExternal := o.Mode == ModeExternal
 	switch mode {
 	case ModeExternal:
 		path := resolveExternalPath(o)
 		if path == "" {
 			if forcedExternal {
-				return fmt.Errorf("udpgw: external mode requires ExternalPath or TB_UDPGW_BINARY")
+				return fmt.Errorf("udpgw: external mode requires ExternalPath")
 			}
 			o.logger().Warn("udpgw: no external binary path; using internal server")
 			return runInternal(ctx, o)
@@ -149,9 +135,6 @@ func runExternal(ctx context.Context, o Options, bin string, forcedExternal bool
 	addr := fmt.Sprintf("127.0.0.1:%d", o.Port)
 	// badvpn-udpgw style
 	args := []string{"--listen-addr", addr}
-	if extra := strings.TrimSpace(os.Getenv("TB_UDPGW_ARGS")); extra != "" {
-		args = append(args, strings.Fields(extra)...)
-	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

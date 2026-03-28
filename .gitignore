@@ -30,5 +30,6 @@ docker/.env
 # IDE and OS metadata
 .idea/
 .vscode/
+.qwen/
 *.DS_Store
 Thumbs.db

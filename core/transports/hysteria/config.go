@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 	"tunnelbypass/tools/host_catalog"
+
+	"gopkg.in/yaml.v3"
 )
 
 // GenerateHysteriaConfig writes server.yaml and client.yaml paths under configs/hysteria.

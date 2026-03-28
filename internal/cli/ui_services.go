@@ -26,16 +26,15 @@ func findInstalledService() string {
 }
 
 func findInstalledServices() []string {
-
 	candidates := []string{
 		"TunnelBypass-VLESS",
 		"TunnelBypass-UDP",
 		"TunnelBypass-Hysteria",
 		"TunnelBypass-WireGuard",
+		installer.UDPGWServiceName,
 		"TunnelBypass-SSH",
 		"TunnelBypass-SSL",
 		"TunnelBypass-WSS",
-		installer.UDPGWServiceName,
 		"TunnelBypass-Tunnel",
 		"WireGuardTunnel$wg_server", // Windows
 		"wg-quick@wg_server",        // Linux
@@ -51,17 +50,6 @@ func findInstalledServices() []string {
 		}
 	}
 	sort.Strings(out)
-	return out
-}
-
-func filterOutUDPGW(services []string) []string {
-	var out []string
-	for _, s := range services {
-		if strings.EqualFold(s, installer.UDPGWServiceName) {
-			continue
-		}
-		out = append(out, s)
-	}
 	return out
 }
 
@@ -117,15 +105,13 @@ func uninstallAllServices(services []string) {
 		return
 	}
 	fmt.Printf("\n    %s[*] Uninstalling all detected services...%s\n", ColorYellow, ColorReset)
+	udpgwUninstalled := false
 	for _, s := range services {
 		tr := detectInstalledTransport(s)
 		var err error
-		if strings.EqualFold(s, installer.UDPGWServiceName) {
-			installer.UninstallService(s)
-			err = nil
-		} else if strings.Contains(s, "Hysteria") {
+		if strings.Contains(s, "Hysteria") {
 			err = hysteria.UninstallHysteriaService(s)
-		} else if strings.Contains(s, "WireGuard") || strings.HasPrefix(s, "WireGuardTunnel$") {
+		} else if strings.Contains(s, "WireGuard") || strings.HasPrefix(s, "WireGuardTunnel$") || strings.HasPrefix(s, "wg-quick@") {
 			err = wireguard.UninstallWireGuardService(s)
 		} else {
 			err = vless.UninstallXrayService(s)
@@ -136,15 +122,24 @@ func uninstallAllServices(services []string) {
 			fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(s), ColorReset)
 			removePortAllocState(s)
 			cleanupArtifactsForTransport(tr, s)
-			if tr == transportSSH || tr == transportSSL || tr == transportWSS {
+			// Uninstall UDPGW as a dependency of SSH-based transports (only once)
+			if !udpgwUninstalled && (tr == transportSSH || tr == transportSSL || tr == transportWSS) {
 				if serviceExists(installer.UDPGWServiceName) {
 					installer.UninstallService(installer.UDPGWServiceName)
 					removePortAllocState(installer.UDPGWServiceName)
 					cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
 					fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(installer.UDPGWServiceName), ColorReset)
+					udpgwUninstalled = true
 				}
 			}
 		}
+	}
+	// If no SSH-based transport was found but UDPGW exists, uninstall it separately
+	if !udpgwUninstalled && serviceExists(installer.UDPGWServiceName) {
+		installer.UninstallService(installer.UDPGWServiceName)
+		removePortAllocState(installer.UDPGWServiceName)
+		cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
+		fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(installer.UDPGWServiceName), ColorReset)
 	}
 }
 
@@ -160,8 +155,17 @@ func serviceExists(name string) bool {
 		return cmd.Run() == nil
 	}
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("systemctl", "status", name)
-		return cmd.Run() == nil
+		// Template units (e.g. wg-quick@wg_server) stay LoadState=loaded even when disabled; use enabled/active.
+		if strings.HasPrefix(name, "wg-quick@") {
+			if exec.Command("systemctl", "is-active", "--quiet", name).Run() == nil {
+				return true
+			}
+			out, _ := exec.Command("systemctl", "is-enabled", name).CombinedOutput()
+			st := strings.TrimSpace(string(out))
+			return st == "enabled" || st == "enabled-runtime"
+		}
+		out, _ := exec.Command("systemctl", "show", "-p", "LoadState", name).CombinedOutput()
+		return strings.Contains(string(out), "LoadState=loaded")
 	}
 	return false
 }

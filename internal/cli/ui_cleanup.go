@@ -33,6 +33,8 @@ func detectInstalledTransport(serviceName string) installedTransport {
 	switch {
 	case strings.Contains(s, "hysteria"):
 		return transportHysteria
+	case strings.Contains(s, "wg-quick"):
+		return transportWireGuard
 	case strings.Contains(s, "wireguard"):
 		return transportWireGuard
 	case strings.Contains(s, "ssh"):

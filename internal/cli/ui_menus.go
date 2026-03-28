@@ -98,7 +98,7 @@ func runHelpMenu(reader *bufio.Reader) {
 
 	fmt.Printf("\n%s1) Setup tunnel%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Printf("   %s- Main Menu -> 1%s %s(Setup/Reinstall Tunnel)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
-	fmt.Printf("   %s- Choose type%s: Reality / WireGuard / Hysteria / SSH / SSL\n", ColorCyan, ColorReset)
+	fmt.Printf("   %s- Choose type%s: Reality / Hysteria / SSH / SSL (WireGuard temporarily disabled)\n", ColorCyan, ColorReset)
 	fmt.Printf("   %s- App creates configs, installs service, and opens firewall rule.%s\n", ColorGray, ColorReset)
 
 	fmt.Printf("\n%s2) Import in client apps%s\n", ColorBold+ColorYellow, ColorReset)
@@ -202,21 +202,6 @@ func runManageServiceMenu(reader *bufio.Reader) {
 	}
 }
 
-func offerUninstallOrphanUDPGW(reader *bufio.Reader) {
-	if !serviceExists(installer.UDPGWServiceName) {
-		return
-	}
-	fmt.Printf("\n%s[!] %s is installed (UDP companion for SSH / WSS / TLS).%s\n", ColorYellow+ColorBold, installer.UDPGWServiceName, ColorReset)
-	ans := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("    %sRemove this service? [y/N]: %s", ColorBold, ColorReset))))
-	if ans != "y" && ans != "yes" {
-		return
-	}
-	installer.UninstallService(installer.UDPGWServiceName)
-	removePortAllocState(installer.UDPGWServiceName)
-	cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
-	fmt.Printf("    %s✓ UDPGW service removed.%s\n", ColorGreen, ColorReset)
-}
-
 func maybeRemoveCompanionUDPGW(reader *bufio.Reader) {
 	if !serviceExists(installer.UDPGWServiceName) {
 		return
@@ -268,7 +253,11 @@ func showUDPGWInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		case "x":
 			return true
 		default:
-			fmt.Printf("    %sInvalid choice.%s\n", ColorRed, ColorReset)
+			if choice == "" {
+				fmt.Printf("    %sNo input — choose 1, 3, 6, q, or x.%s\n", ColorYellow, ColorReset)
+			} else {
+				fmt.Printf("    %sInvalid choice.%s\n", ColorRed, ColorReset)
+			}
 		}
 	}
 }
@@ -391,7 +380,11 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		case "x":
 			return true
 		default:
-			fmt.Printf("    %sInvalid choice.%s\n", ColorRed, ColorReset)
+			if choice == "" {
+				fmt.Printf("    %sNo input — choose 1–7, q, or x.%s\n", ColorYellow, ColorReset)
+			} else {
+				fmt.Printf("    %sInvalid choice.%s\n", ColorRed, ColorReset)
+			}
 		}
 	}
 }
@@ -414,9 +407,14 @@ func showServiceStatus(name string) {
 		filepath.Join(base, "logs", name+".out.log"),
 		filepath.Join(base, "logs", name+".err.log"),
 		filepath.Join(base, "logs", name+".wrapper.log"),
-		filepath.Join(base, "logs", "xray_error.log"),
-		filepath.Join(base, "logs", "xray_access.log"),
+		filepath.Join(base, "logs", name+".log"),
 	}
+	
+	if strings.Contains(name, "VLESS") || strings.Contains(name, "Reality") || strings.Contains(name, "Tunnel") {
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_error.log"))
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_access.log"))
+	}
+	
 	for _, logPath := range logCandidates {
 		if _, err := os.Stat(logPath); err != nil {
 			continue
@@ -424,4 +422,8 @@ func showServiceStatus(name string) {
 		fmt.Printf("    %s%s%s\n", ColorGray, logPath, ColorReset)
 	}
 	fmt.Printf("\n    %sNote:%s Open these files to view logs (not printed in CMD).\n", ColorGray, ColorReset)
+	if runtime.GOOS == "linux" {
+		fmt.Printf("    %sLinux Systemd:%s View logs using `journalctl -f -u %s`\n", ColorYellow, ColorReset, name)
+	}
 }
+

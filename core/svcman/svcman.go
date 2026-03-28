@@ -64,7 +64,7 @@ func Resolve(inf runtimeenv.Info, deps Deps) ServiceManager {
 }
 
 func windowsNativeSCM() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("TB_WINDOWS_SVC")))
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("TUNNELBYPASS_WINDOWS_SVC")))
 	return v == "native" || v == "scm"
 }
 
@@ -113,6 +113,7 @@ func (m *systemdManager) Install(c Config) error {
 	}
 	unitPath := filepath.Join("/etc/systemd/system", c.Name+".service")
 	argStr := strings.Join(quoteSystemdArgs(c.Args), " ")
+
 	content := fmt.Sprintf(`[Unit]
 Description=%s
 After=network.target
@@ -123,6 +124,9 @@ ExecStart=%s %s
 WorkingDirectory=%s
 Restart=always
 RestartSec=3
+StandardOutput=journal
+StandardError=journal
+StandardInput=null
 
 [Install]
 WantedBy=multi-user.target
@@ -246,7 +250,7 @@ func (m *winSWManager) Remove(name string) error {
 	return nil
 }
 
-// --- Windows native SCM (TB_WINDOWS_SVC=native|scm) ---
+// --- Windows native SCM (TUNNELBYPASS_WINDOWS_SVC=native|scm) ---
 
 type windowsNativeManager struct{}
 

@@ -41,7 +41,7 @@ func (c Config) logger() *slog.Logger {
 // Run listens until ctx is cancelled.
 func Run(ctx context.Context, cfg Config) error {
 	if cfg.ListenAddr == "" {
-		cfg.ListenAddr = "0.0.0.0:2222"
+		return fmt.Errorf("tbssh: ListenAddr required (use 127.0.0.1:0 for dynamic port)")
 	}
 	if cfg.Username == "" {
 		return fmt.Errorf("tbssh: Username required")
@@ -134,7 +134,7 @@ func handleConn(ctx context.Context, conn net.Conn, cfg *ssh.ServerConfig, log *
 	go ssh.DiscardRequests(reqs)
 
 	var activeSessions int32
- 
+
 	for newCh := range chans {
 		switch newCh.ChannelType() {
 		case "session":

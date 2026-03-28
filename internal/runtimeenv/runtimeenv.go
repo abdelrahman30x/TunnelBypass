@@ -31,9 +31,6 @@ func Detect() Info {
 	inf := Info{
 		IsRoot: os.Getuid() == 0,
 	}
-	if v := strings.TrimSpace(os.Getenv("TB_PORTABLE")); v == "1" || strings.EqualFold(v, "true") {
-		inf.ForcePortable = true
-	}
 	if os.Getenv("NO_SYSTEMD") == "1" {
 		inf.HasSystemd = false
 	} else {

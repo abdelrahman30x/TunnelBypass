@@ -2,11 +2,14 @@ package installer
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"tunnelbypass/internal/utils"
 )
@@ -31,7 +34,9 @@ func ensureOpenSSHServerInstall() error {
 			if _, err := exec.LookPath(pkg[0]); err != nil {
 				continue
 			}
-			_ = exec.Command(pkg[0], pkg[1:]...).Run()
+			cmd := exec.Command(pkg[0], pkg[1:]...)
+			cmd.Env = envForPkgManager(pkg[0])
+			_ = cmd.Run()
 			if PortListening(22) {
 				return nil
 			}
@@ -85,29 +90,21 @@ func ensureOpenSSHServerInstall() error {
 	return nil
 }
 
-// PortListening checks if a local port is listening (Windows/Linux).
+// PortListening reports whether something accepts TCP connections on loopback for this port.
+// Uses an actual connect (not parsing ss/netstat) so minimal images without iproute2 still work.
 func PortListening(port int) bool {
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("netstat", "-ano")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return false
-		}
-		s := string(out)
-		pStr := fmt.Sprintf(":%d", port)
-		return strings.Contains(s, pStr) && strings.Contains(strings.ToUpper(s), "LISTENING")
-	}
-	out, err := exec.Command("ss", "-tunl").CombinedOutput()
-	if err != nil {
-		out, err = exec.Command("netstat", "-tunl").CombinedOutput()
-	}
-	if err != nil {
+	if port <= 0 || port > 65535 {
 		return false
 	}
-	pStr := fmt.Sprintf(":%d", port)
-	outStr := string(out)
-	// Precise check for :PORT followed by space or end of line to avoid matching :22 in :2222
-	return strings.Contains(outStr, pStr+" ") || strings.Contains(outStr, pStr+"\t") || strings.Contains(outStr, pStr+"\n") || strings.HasSuffix(strings.TrimSpace(outStr), pStr)
+	s := strconv.Itoa(port)
+	for _, host := range []string{"127.0.0.1", "::1"} {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, s), 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }
 
 func EnsureFreeTCPPort(preferred int, label string) int {
@@ -116,7 +113,8 @@ func EnsureFreeTCPPort(preferred int, label string) int {
 		fmt.Printf("    [!] Warning: could not allocate free TCP port for %s. Keeping %d (may fail).\n", label, preferred)
 		return preferred
 	}
-	if p != preferred {
+	// preferred <= 0 means "pick any free port" — do not print "port 0 is busy".
+	if preferred > 0 && p != preferred {
 		fmt.Printf("    [!] Port %d is busy for %s. Using free port %d.\n", preferred, label, p)
 	}
 	return p
@@ -124,25 +122,67 @@ func EnsureFreeTCPPort(preferred int, label string) int {
 
 const UDPGWServiceName = "TunnelBypass-UDPGW"
 
-func EnsureSSHUDPGW(port int) error {
-	if port <= 0 {
-		port = 7300
+func udpgwServiceExists() bool {
+	if runtime.GOOS == "linux" {
+		if _, err := os.Stat("/etc/systemd/system/TunnelBypass-UDPGW.service"); err == nil {
+			return true
+		}
 	}
-	port = EnsureFreeTCPPort(port, "UDPGW")
+	return false
+}
 
-	serviceName := UDPGWServiceName
-	args := []string{"udpgw-svc", "-udpgw-port", strconv.Itoa(port)}
+// EnsureSSHUDPGW installs TunnelBypass-UDPGW (`run udpgw`) so it appears as its own service (uninstall UX).
+// TunnelBypass-SSH should be installed with --external-udpgw so SSH does not bind UDPGW twice.
+// Returns the TCP port UDPGW listens on (for matching --udpgw-port on the SSH service).
+func EnsureSSHUDPGW(preferred int) (int, error) {
+	if preferred <= 0 {
+		preferred = 7300
+	}
+	if udpgwServiceExists() {
+		fmt.Printf("    [*] UDPGW service already exists, skipping installation\n")
+		if err := waitUDPGWListen(preferred, 30*time.Second); err != nil {
+			return preferred, err
+		}
+		return preferred, nil
+	}
+	if PortListening(preferred) {
+		fmt.Printf("    [*] UDPGW already listening on port %d, skipping service creation\n", preferred)
+		return preferred, nil
+	}
+
+	port := EnsureFreeTCPPort(preferred, "UDPGW")
+
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get executable path for UDPGW service: %w", err)
+	}
+	args := []string{"run", "udpgw", "--udpgw-port", strconv.Itoa(port)}
 
 	if err := CreateService(
-		serviceName,
-		serviceName+" (TunnelBypass UDPGW)",
-		serviceExecutable(),
+		UDPGWServiceName,
+		UDPGWServiceName+" (TunnelBypass UDPGW)",
+		exe,
 		args,
 		GetBaseDir(),
 	); err != nil {
-		return err
+		return 0, err
 	}
 
-	_ = OpenFirewallPort(port, "tcp", serviceName)
-	return nil
+	_ = OpenFirewallPort(port, "tcp", UDPGWServiceName)
+	fmt.Printf("    [*] UDPGW service installed on port %d\n", port)
+	if err := waitUDPGWListen(port, 45*time.Second); err != nil {
+		return port, err
+	}
+	return port, nil
+}
+
+func waitUDPGWListen(port int, total time.Duration) error {
+	deadline := time.Now().Add(total)
+	for time.Now().Before(deadline) {
+		if PortListening(port) {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout waiting for UDPGW to listen on %d", port)
 }

@@ -9,6 +9,7 @@ import (
 
 	"tunnelbypass/internal/cfg"
 	"tunnelbypass/internal/engine"
+	"tunnelbypass/internal/utils"
 )
 
 const exitConfig = 2
@@ -58,10 +59,11 @@ func executeRun(rawArgs []string) int {
 	serverFlag := fs.String("server", "", "Server public address for clients (default: detect public IP)")
 	uuidFlag := fs.String("uuid", "", "UUID or auth secret; use 'auto' to generate")
 	portFlag := fs.Int("port", 0, "Listen port (transport-specific default if 0)")
-	logsDirFlag := fs.String("logs-dir", "", "Log directory (default: <data-dir>/logs; overrides TB_LOGS_DIR)")
+	logsDirFlag := fs.String("logs-dir", "", "Log directory (default: <data-dir>/logs)")
 	generateOnly := fs.Bool("dry-run", false, "Generate configs only; do not start the tunnel")
-	noElevate := fs.Bool("no-elevate", false, "Do not auto-elevate to Administrator/root for OS service install and firewall (user-mode only); override TB_NO_ELEVATE")
+	noElevate := fs.Bool("no-elevate", false, "Do not auto-elevate to Administrator/root for OS service install and firewall (user-mode only)")
 	autoStart := fs.Bool("auto-start", true, "Start transport after generation")
+	externalUDPGW := fs.Bool("external-udpgw", false, "For ssh: UDPGW is already running (e.g. TunnelBypass-UDPGW service); do not start in-process UDPGW")
 
 	argsForFs, portableWord := stripPortableToken(rawArgs)
 	_ = fs.Parse(argsForFs)
@@ -111,7 +113,7 @@ func executeRun(rawArgs []string) int {
 		transport = strings.TrimSpace(rspec.Transport)
 	}
 	if transport == "" {
-		fmt.Fprintln(os.Stderr, "tunnelbypass run: missing transport (e.g. ssh) or use --type/--spec/--config")
+		fmt.Fprintf(os.Stderr, "%s run: missing transport (e.g. ssh) or use --type/--spec/--config\n", utils.AppName())
 		fs.Usage()
 		return exitConfig
 	}
@@ -135,11 +137,21 @@ func executeRun(rawArgs []string) int {
 		rspec.UDPGW.Enabled = true
 		rspec.UDPGW.Port = *udpgwP
 	}
+	if *externalUDPGW {
+		rspec.UDPGW.External = true
+	}
 	if strings.TrimSpace(*sshUser) != "" {
 		rspec.Auth.SSHUser = strings.TrimSpace(*sshUser)
 	}
 	if strings.TrimSpace(*sshPass) != "" {
 		rspec.Auth.SSHPass = strings.TrimSpace(*sshPass)
+	}
+	// Optional: systemd EnvironmentFile may set TUNNELBYPASS_SSH_USER / TUNNELBYPASS_SSH_PASSWORD
+	if rspec.Auth.SSHUser == "" {
+		rspec.Auth.SSHUser = strings.TrimSpace(os.Getenv("TUNNELBYPASS_SSH_USER"))
+	}
+	if rspec.Auth.SSHPass == "" {
+		rspec.Auth.SSHPass = strings.TrimSpace(os.Getenv("TUNNELBYPASS_SSH_PASSWORD"))
 	}
 	fromFile := strings.TrimSpace(*configPath) != "" || strings.TrimSpace(*specPath) != ""
 	if !fromFile {

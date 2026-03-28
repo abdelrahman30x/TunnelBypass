@@ -203,9 +203,13 @@ func UninstallWireGuardService(serviceName string) error {
 		if tunnelName == "" {
 			tunnelName = "wg_server"
 		}
+		if strings.HasPrefix(serviceName, "wg-quick@") {
+			tunnelName = strings.TrimPrefix(serviceName, "wg-quick@")
+		}
 		if st.Mode == "systemd" {
 			unit := "wg-quick@" + tunnelName
 			_ = exec.Command("systemctl", "disable", "--now", unit).Run()
+			_ = exec.Command("systemctl", "reset-failed", unit).Run()
 		}
 		_ = exec.Command("wg-quick", "down", tunnelName).Run()
 		_ = os.Remove(filepath.Join("/etc/wireguard", tunnelName+".conf"))

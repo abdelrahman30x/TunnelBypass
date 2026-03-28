@@ -1,30 +1,22 @@
-// Package debug: TB_DEBUG flag and slog.Debug bridge.
+// Package debug: --debug flag and slog.Debug bridge.
 package debug
 
 import (
 	"fmt"
 	"log"
 	"log/slog"
-	"os"
 )
 
 var enabled bool
 
-// True after Init when --debug or TB_DEBUG is set.
+// True after Init when --debug is set.
 func Enabled() bool {
 	return enabled
 }
 
-// Init turns on debug mode from the flag or TB_DEBUG (1, true, yes, on — case-insensitive).
+// Init turns on debug mode from the CLI flag only.
 func Init(flagDebug bool) {
 	enabled = flagDebug
-	if enabled {
-		return
-	}
-	switch os.Getenv("TB_DEBUG") {
-	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
-		enabled = true
-	}
 }
 
 // Standard library log format when debug is on.

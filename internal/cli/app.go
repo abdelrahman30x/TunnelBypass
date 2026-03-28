@@ -15,6 +15,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
+	"tunnelbypass/core/portforward"
 	"tunnelbypass/core/udpgw"
 	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/elevate"
@@ -24,7 +25,7 @@ import (
 	"tunnelbypass/tools/host_catalog"
 )
 
-var version = "v1.2.0"
+var version = "v1.2.1"
 
 // SetVersion sets the user-visible release string before Main (from cmd, or tests).
 func SetVersion(v string) {
@@ -43,16 +44,21 @@ func getDefaultConfigPath() string {
 }
 
 var (
-	configFlag = flag.String("config", getDefaultConfigPath(), "Path to config file")
-	verReq     = flag.Bool("version", false, "Show version")
-	udpgwPort  = flag.Int("udpgw-port", 7300, "UDPGW listen port")
-	debugFlag  = flag.Bool("debug", false, "Verbose log output (or set TB_DEBUG=1)")
+	configFlag    = flag.String("config", getDefaultConfigPath(), "Path to config file")
+	verReq        = flag.Bool("version", false, "Show version")
+	udpgwPort     = flag.Int("udpgw-port", 7300, "UDPGW listen port")
+	debugFlag     = flag.Bool("debug", false, "Verbose log output")
+	forwarderListen = flag.String("listen", "127.0.0.1:0", "Forwarder listen address (0 = dynamic allocation)")
+	forwarderTarget = flag.String("target", "127.0.0.1:0", "Forwarder target address")
 )
 
 // Main is the tunnelbypass CLI entry (called from cmd).
 func Main() {
 	terminal.EnableVTProcessing()
 	tblog.Init()
+	if v := strings.TrimSpace(os.Getenv("TUNNELBYPASS_DATA_DIR")); v != "" {
+		installer.SetDataRootOverride(v)
+	}
 
 	if i := subcommandIndex("run"); i >= 0 {
 		var ra []string
@@ -110,6 +116,7 @@ func Main() {
 	flag.Parse()
 
 	debug.Init(*debugFlag)
+	tblog.ApplyDebug(debug.Enabled())
 	debug.ConfigureLog()
 	debug.Logf("version=%s args=%q", version, os.Args)
 	debug.Logf("default config path=%s", *configFlag)
@@ -120,8 +127,8 @@ func Main() {
 	}
 
 	if len(os.Args) < 2 {
-		if os.Getenv("TB_AUTORUN_SETUP") == "1" && elevate.IsAdmin() {
-			_ = os.Unsetenv("TB_AUTORUN_SETUP")
+		if os.Getenv("TUNNELBYPASS_AUTORUN_SETUP") == "1" && elevate.IsAdmin() {
+			_ = os.Unsetenv("TUNNELBYPASS_AUTORUN_SETUP")
 			runSetupDirect()
 			return
 		}
@@ -142,6 +149,8 @@ func Main() {
 		runHysteriaService()
 	case "udpgw-svc":
 		runUdpgwService()
+	case "forwarder":
+		runForwarderService()
 	default:
 		printUsage()
 	}
@@ -179,6 +188,35 @@ func runUdpgwService() {
 	defer nc.cancel()
 	if err := udpgw.Run(nc.ctx, udpgw.Options{Port: *udpgwPort, Logger: tblog.Sub("udpgw")}); err != nil && nc.ctx.Err() == nil {
 		log.Fatalf("UDPGW service failed: %v", err)
+	}
+}
+
+func runForwarderService() {
+	nc := notifyContext()
+	defer nc.cancel()
+
+	listenAddr := *forwarderListen
+	targetAddr := *forwarderTarget
+
+	if targetAddr == "127.0.0.1:0" {
+		// Try to load from config
+		cfg, err := installer.LoadSSHPortConfig()
+		if err == nil && cfg.InternalPort > 0 {
+			targetAddr = fmt.Sprintf("127.0.0.1:%d", cfg.InternalPort)
+		} else {
+			log.Fatalf("Forwarder target not specified and could not load from config")
+		}
+	}
+
+	forwarder := portforward.New(portforward.Config{
+		ListenAddr: listenAddr,
+		TargetAddr: targetAddr,
+		Logger:     tblog.Sub("forwarder"),
+	})
+
+	fmt.Printf("Starting port forwarder: %s -> %s\n", listenAddr, targetAddr)
+	if err := forwarder.Run(nc.ctx); err != nil && nc.ctx.Err() == nil {
+		log.Fatalf("Forwarder service failed: %v", err)
 	}
 }
 
@@ -244,7 +282,7 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  tunnelbypass [flags] <command>")
 	fmt.Println("\nCommands:")
-	fmt.Println("  wizard  - Configure and install tunnel (Reality/VLESS, Hysteria, WireGuard) as a service")
+	fmt.Println("  wizard  - Configure and install tunnel (Reality/VLESS, Hysteria, …) as a service (WireGuard temporarily disabled)")
 	fmt.Println("            Note: SSH, WSS, and TLS protocols are temporarily disabled.")
 	fmt.Println("  hosts   - View tunnel host catalog")
 	fmt.Println("  run     - Run transport (default: system data dir like wizard; add 'portable' or --portable for per-user); see run -help")
@@ -255,25 +293,7 @@ func printUsage() {
 	fmt.Println("  health  - Same as status")
 	fmt.Println("\nFlags:")
 	flag.PrintDefaults()
-	fmt.Println("\nEnvironment:")
-	fmt.Println("  TB_DEBUG=1   Same effect as --debug for standard log output")
-	fmt.Println("  TB_LOG_LEVEL=debug|info|warn|error  slog level (overrides default info)")
-	fmt.Println("  TB_LOG=json  Structured JSON logs (slog)")
-	fmt.Println("  TB_SVC_INITIAL_BACKOFF_MS=1000,2000,5000  First restart delays before exponential backoff")
-	fmt.Println("  TB_PROBE_TIMEOUT_MS / TB_PROBE_RETRIES / TB_PROBE_INTERVAL_MS  Portable health probes")
-	fmt.Println("  TB_XRAY_VERSION / TB_HYSTERIA_VERSION / TB_WSTUNNEL_VERSION  Pin downloaded binaries")
-	fmt.Println("  TB_*_MIRROR_URLS  Comma-separated fallback download URLs (Xray/Hysteria)")
-	fmt.Println("  TB_BIN_FORCE_REFRESH=1  Delete cached binary and re-download on next ensure")
-	fmt.Println("  TB_EMBED_SOCKS5=127.0.0.1:1080  Optional TCP SOCKS5 (WARNING: No Auth! Use 127.0.0.1 only)")
-	fmt.Println("  TB_PORTABLE=1  Prefer portable data directory in installers/detect")
-	fmt.Println("  TB_UDPGW_MODE=auto|internal|external")
-	fmt.Println("  TB_UDPGW_BINARY=path  External badvpn-udpgw-compatible binary (auto mode)")
-	fmt.Println("  TB_WINDOWS_SVC=native   Windows: use kardianos/service instead of WinSW (opt-in)")
-	fmt.Println("  TB_SVC_MAX_CRASH_LOOPS=N  Stop child restarts after N short crashes (0=unlimited)")
-	fmt.Println("  TB_UDPGW_MAX_CLIENTS=N  Cap concurrent UDPGW TCP clients (default 512)")
-	fmt.Println("  TB_LOGS_DIR=path  Log directory for Xray access/error logs (overridden by --logs-dir)")
-	fmt.Println("  TB_DEP_START_TIMEOUT_MS=N  Max wait per dependency becoming ready (default 120000)")
-	fmt.Println("  TB_ALLOW_SVC_IN_CONTAINER=1  Allow --install-service inside containers (default: refused)")
+	fmt.Println("\nUse flags (e.g. --debug, --portable, --data-dir) and config files under the data directory.")
 }
 
 func subcommandIndex(name string) int {

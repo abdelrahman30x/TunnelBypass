@@ -35,6 +35,10 @@ func RunNamed(ctx context.Context, log *slog.Logger, name string, o Options) err
 	if depErr != nil {
 		return depErr
 	}
+	// Separate TunnelBypass-UDPGW service: do not start in-process udpgw before ssh.
+	if strings.EqualFold(name, "ssh") && o.ExternalUDPGW {
+		deps = nil
+	}
 	if len(deps) > 0 {
 		prevUDPGW := o.UDPGWPort
 		normalizePortsForOrchestration(deps, &o)

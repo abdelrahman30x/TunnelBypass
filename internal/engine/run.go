@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"tunnelbypass/core/installer"
+	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/provision"
 	"tunnelbypass/core/svcinstall"
@@ -19,19 +21,37 @@ import (
 	"tunnelbypass/internal/runtimeenv"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/uicolors"
+	"tunnelbypass/internal/utils"
 )
 
 func externalPortFor(transport string, spec cfg.RunSpec) (int, string) {
-	switch strings.ToLower(strings.TrimSpace(transport)) {
+	t := strings.ToLower(strings.TrimSpace(transport))
+	switch t {
+	case "udpgw":
+		if spec.UDPGW.Port > 0 {
+			return spec.UDPGW.Port, "tcp"
+		}
+		return 7300, "tcp"
 	case "hysteria", "wireguard":
 		return spec.Port, "udp"
+	case "ssh", "wss", "tls":
+		// For SSH-based transports, use SSH.Port (the backend SSH port)
+		// This is the internal port that needs conflict checking
+		if spec.SSH.Port > 0 {
+			return spec.SSH.Port, "tcp"
+		}
+		// If SSH.Port is not set but Port is, use Port
+		if spec.Port > 0 {
+			return spec.Port, "tcp"
+		}
+		return 0, "tcp"
 	default:
 		return spec.Port, "tcp"
 	}
 }
 
 func conflictCommandHint(spec cfg.RunSpec) string {
-	cmd := "tunnelbypass run --type " + strings.ToLower(strings.TrimSpace(spec.Transport))
+	cmd := utils.AppName() + " run --type " + strings.ToLower(strings.TrimSpace(spec.Transport))
 	if spec.Behavior.Portable {
 		cmd += " portable"
 	}
@@ -48,11 +68,6 @@ func transportInstallsOSService(transport string) bool {
 	default:
 		return false
 	}
-}
-
-func tbNoElevateEnv() bool {
-	v := strings.TrimSpace(strings.ToLower(os.Getenv("TB_NO_ELEVATE")))
-	return v == "1" || v == "true" || v == "yes"
 }
 
 // Run provisions configs then either installs an OS service (server layout) or runs in-process (portable).
@@ -80,7 +95,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	cf := portable.BuildConflict(spec.Transport, p, conflictCommandHint(spec), netw, strings.TrimSpace(spec.Paths.DataDir))
 	if cf.Kind == portable.ConflictSameServiceSameConfig {
 		fmt.Println("[!] Existing compatible service detected; reusing current runtime.")
-		fmt.Println("[+] Check status: tunnelbypass status")
+		fmt.Printf("[+] Check status: %s status\n", utils.AppName())
 		return nil
 	}
 	if cf.Kind != portable.ConflictNone {
@@ -94,24 +109,25 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	// OS service + firewall path needs elevated privileges; re-exec via UAC/sudo before provisioning.
 	if !spec.Behavior.Portable && transportInstallsOSService(spec.Transport) && !inf.LikelyContainer &&
 		spec.Behavior.AutoStart && !spec.Behavior.GenerateOnly &&
-		!spec.Behavior.NoElevate && !tbNoElevateEnv() && !elevate.IsAdmin() {
+		!spec.Behavior.NoElevate && !elevate.IsAdmin() {
 		fmt.Fprintln(os.Stderr, "[*] Administrator/root is required to install the OS service and firewall rule; requesting elevation...")
 		if err := elevate.Elevate(); err != nil {
-			return fmt.Errorf("elevation failed or was cancelled: %w\n(hint: use --no-elevate or TB_NO_ELEVATE=1 for user-mode only, or `tunnelbypass run portable ...`)", err)
+			return fmt.Errorf("elevation failed or was cancelled: %w\n(hint: use --no-elevate for user-mode only, or `%s run portable ...`)", err, utils.AppName())
 		}
 		return nil
 	}
 
 	log := tblog.Sub("engine")
 	opt := types.ConfigOptions{
-		Transport:   spec.Transport,
-		ServerAddr:  strings.TrimSpace(spec.Server.Address),
-		Port:        spec.Port,
-		UUID:        strings.TrimSpace(spec.Auth.UUID),
-		Sni:         strings.TrimSpace(spec.SNI),
-		Host:        strings.TrimSpace(spec.Server.Address),
-		SSHUser:     strings.TrimSpace(spec.Auth.SSHUser),
-		SSHPassword: strings.TrimSpace(spec.Auth.SSHPass),
+		Transport:      spec.Transport,
+		ServerAddr:     strings.TrimSpace(spec.Server.Address),
+		Port:           spec.Port,
+		UUID:           strings.TrimSpace(spec.Auth.UUID),
+		Sni:            strings.TrimSpace(spec.SNI),
+		Host:           strings.TrimSpace(spec.Server.Address),
+		SSHUser:        strings.TrimSpace(spec.Auth.SSHUser),
+		SSHPassword:    strings.TrimSpace(spec.Auth.SSHPass),
+		SSHBackendPort: spec.SSH.Port, // Pass SSH port to provisioning
 	}
 
 	res, err := provision.ByTransport(log, spec.Transport, opt, "", "")
@@ -138,7 +154,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		}
 		fmt.Println()
 		fmt.Println("[+] Service/supervisor is running in the background; this process exits.")
-		fmt.Println("[+] Verify listener: tunnelbypass status")
+		fmt.Printf("[+] Verify listener: %s status\n", utils.AppName())
 		return nil
 	}
 
@@ -147,6 +163,9 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		UDPGWPort: spec.UDPGW.Port,
 		SSHUser:   spec.Auth.SSHUser,
 		SSHPass:   spec.Auth.SSHPass,
+	}
+	if cfg.NormalizeTransport(spec.Transport) == "ssh" && spec.UDPGW.External {
+		pOpts.ExternalUDPGW = true
 	}
 	if spec.Transport == "wss" {
 		pOpts.WssPort = spec.Port
@@ -170,15 +189,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 }
 
 func usePrettyResultUI(spec cfg.RunSpec) bool {
-	if spec.Behavior.Portable {
-		return false
-	}
-	switch strings.TrimSpace(strings.ToLower(os.Getenv("TB_UI_PRETTY_RESULT"))) {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
+	return !spec.Behavior.Portable
 }
 
 func PrintResult(spec cfg.RunSpec, res transport.Result) {
@@ -233,10 +244,40 @@ func PrintResult(spec cfg.RunSpec, res transport.Result) {
 // printPrettyClientTunnel is the compact ssh/tls/wss summary (one box, no instruction file dump).
 func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, transportName string) {
 	dataDir := installer.GetBaseDir()
-	sshPort := spec.SSH.Port
-	if sshPort <= 0 {
-		sshPort = 22
+	
+	// Get internal and external SSH ports
+	internalPort := installer.GetSSHBackendPort()
+	externalPort := installer.GetSSHExternalPort()
+	
+	// For TLS, port config can reflect local stunnel accept / forwarder ports.
+	// For WSS, internal is the server SSH backend through the tunnel; "external" is the
+	// client-side local port (wstunnel -L / ssh -p), not the server's forwarder ExternalPort.
+	if transportName == "tls" {
+		portCfg, err := installer.LoadSSHPortConfig()
+		if err == nil {
+			if portCfg.InternalPort > 0 {
+				internalPort = portCfg.InternalPort
+			}
+			if portCfg.ExternalPort > 0 {
+				externalPort = portCfg.ExternalPort
+			}
+		}
+	} else if transportName == "wss" {
+		portCfg, err := installer.LoadSSHPortConfig()
+		if err == nil && portCfg.InternalPort > 0 {
+			internalPort = portCfg.InternalPort
+		}
+		externalPort = tbssh.WSSClientLocalSSHPort()
 	}
+	
+	// Fallback if not set
+	if internalPort <= 0 {
+		internalPort = spec.SSH.Port
+	}
+	if externalPort <= 0 {
+		externalPort = internalPort
+	}
+	
 	sni := strings.TrimSpace(spec.SNI)
 
 	fmt.Printf("\n%s╔══════════════════════════════════════════════════════════════╗%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
@@ -256,7 +297,17 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 		fmt.Printf("  %sSSH port:%s   %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Port, uicolors.ColorReset)
 	} else {
 		fmt.Printf("  %sListen port:%s %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Port, uicolors.ColorReset)
-		fmt.Printf("  %sSSH (server):%s %s%d%s %s(internal)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, sshPort, uicolors.ColorReset, uicolors.ColorGray, uicolors.ColorReset)
+		internalNote := "(for WSS)"
+		if transportName == "tls" {
+			internalNote = "(stunnel → this port on server)"
+		}
+		fmt.Printf("  %sSSH (internal):%s %s%d%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, internalPort, uicolors.ColorReset, uicolors.ColorGray, internalNote, uicolors.ColorReset)
+		if transportName == "tls" {
+			fmt.Printf("  %sSSH (server forwarder):%s %s%d%s %s(optional direct: ssh -p %d … @%s)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, externalPort, uicolors.ColorReset, uicolors.ColorGray, externalPort, endpoint, uicolors.ColorReset)
+			fmt.Printf("  %sAfter stunnel (client):%s %s127.0.0.1:%d%s %s(ssh -p %d … @127.0.0.1)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, tbssh.TLSClientLocalSSHPort(), uicolors.ColorReset, uicolors.ColorGray, tbssh.TLSClientLocalSSHPort(), uicolors.ColorReset)
+		} else {
+			fmt.Printf("  %sSSH (external):%s %s%d%s %s(for clients)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, externalPort, uicolors.ColorReset, uicolors.ColorGray, uicolors.ColorReset)
+		}
 	}
 	if (transportName == "tls" || transportName == "wss") && sni != "" {
 		fmt.Printf("  %sSNI / host:%s  %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, sni, uicolors.ColorReset)
@@ -276,17 +327,19 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 	case "ssh":
 		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Port, spec.Auth.SSHUser, endpoint, uicolors.ColorReset)
 	case "tls":
+		tlsLocal := tbssh.TLSClientLocalSSHPort()
 		fmt.Printf("  %s·%s %sstunnel %s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, filepath.Join(installer.GetConfigDir("stunnel"), "stunnel-client.conf"), uicolors.ColorReset)
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, tlsLocal, spec.Auth.SSHUser, uicolors.ColorReset)
 	case "wss":
 		// Modern syntax: -L tcp://localPort:remoteHost:remotePort
 		// Use -H "Host: <SNI>" as recommended for stealth (fake SNI / Host Header)
-		cmd := fmt.Sprintf("wstunnel client -L tcp://127.0.0.1:2222:127.0.0.1:%d wss://%s:%d", sshPort, endpoint, spec.Port)
+		// wstunnel connects to internal SSH port, client connects to external port via forwarder
+		cmd := fmt.Sprintf("wstunnel client -L tcp://127.0.0.1:%d:127.0.0.1:%d wss://%s:%d", externalPort, internalPort, endpoint, spec.Port)
 		if sni != "" {
 			cmd += fmt.Sprintf(" -H \"Host: %s\" --tls-sni-override %s", sni, sni)
 		}
 		fmt.Printf("  %s·%s %s%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, cmd, uicolors.ColorReset)
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Auth.SSHUser, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, externalPort, spec.Auth.SSHUser, uicolors.ColorReset)
 	}
 
 	fmt.Printf("\n  %s(Installed on this machine: %s)%s\n", uicolors.ColorGray, dataDir, uicolors.ColorReset)
@@ -349,6 +402,13 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 			fmt.Printf("  %sWG URL:%s %s%s%s\n", uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset, uicolors.ColorBold, res.SharingLink, uicolors.ColorReset)
 		}
 		fmt.Printf("  %sImport this config/URL in your WireGuard app.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		if spec.Port > 0 {
+			fmt.Printf("  %sHandshake needs UDP/%d reachable from the client: allow it in the cloud provider firewall/security group and on the host (tunnelbypass opens rules when run as root).%s\n", uicolors.ColorGray, spec.Port, uicolors.ColorReset)
+			fmt.Printf("  %sIf you changed keys or re-ran the wizard, re-import the new client config on every device.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		}
+		if runtime.GOOS == "linux" {
+			fmt.Printf("  %sServer check: wg show wg_server — if handshakes fail, peer rx/last handshake stay empty.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		}
 		fmt.Printf("\n  %s[ SCAN FOR MOBILE APPS ]%s\n", uicolors.ColorYellow, uicolors.ColorReset)
 		fmt.Printf("  %sScan WG QR from your app if you generated one under configs/wireguard.%s\n", uicolors.ColorGray, uicolors.ColorReset)
 	default:

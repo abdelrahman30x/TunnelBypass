@@ -82,7 +82,7 @@ func Report(w io.Writer) {
 
 	_, _ = fmt.Fprintln(w, "\nhints:")
 	_, _ = fmt.Fprintln(w, "  - If native services are used, check OS service manager instead of pid files.")
-	_, _ = fmt.Fprintln(w, "  - For crash loops see logs/TunnelBypass-Service.log and TB_SVC_MAX_CRASH_LOOPS.")
+	_, _ = fmt.Fprintln(w, "  - For crash loops see logs/TunnelBypass-Service.log (supervisor stops after repeated short crashes).")
 }
 
 func printPortableRegistry(w io.Writer) {

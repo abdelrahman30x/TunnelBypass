@@ -29,9 +29,8 @@ COPY --from=build /tunnelbypass /usr/local/bin/tunnelbypass
 USER nonroot
 WORKDIR /data
 
-ENV TB_LOG=json
-# Fixed data root for portable layout (wizard + run); satisfies run layout checks with TB_PORTABLE=1
-ENV TB_DATA_DIR=/data TB_PORTABLE=1
+# Optional: fixed data root for images/compose (see internal/cli Main TUNNELBYPASS_DATA_DIR).
+ENV TUNNELBYPASS_DATA_DIR=/data
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD []

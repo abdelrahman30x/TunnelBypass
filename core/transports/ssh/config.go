@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"tunnelbypass/core/installer"
+	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/types"
 )
 
@@ -27,11 +28,14 @@ func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 	_ = os.WriteFile(bannerCopyFile, []byte(sshWelcome+"\n"), 0644)
 
 	installer.BestEffortConfigureSSHBanner(sshWelcome)
-	
+
 	sshPort := opt.Port
 	remoteSSH := opt.SSHBackendPort
 	if remoteSSH <= 0 {
-		remoteSSH = 22
+		remoteSSH = installer.GetSSHBackendPort()
+	}
+	if remoteSSH <= 0 {
+		remoteSSH = 22 // Only fallback to 22 if we can't determine the actual port
 	}
 
 	config := fmt.Sprintf(`# SSH Tunnel — Credentials & Client Commands
@@ -52,7 +56,7 @@ func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 #
 # UDP support (TunnelBypass UDPGW, badvpn-compatible protocol; bundled with SSH automatically):
 #   UDPGW endpoint: 127.0.0.1:7300 (over SSH tunnel); portable: tunnelbypass run --portable ssh
-#   Mode via TB_UDPGW_MODE / TB_UDPGW_BINARY
+#   Internal UDPGW is started with the portable SSH stack unless you use an external helper.
 #
 `, opt.ServerAddr, sshPort, sshUser, sshPass, sshPort, sshUser, opt.ServerAddr, sshPort, sshUser, opt.ServerAddr, installer.GetSystemSSHBannerPath(), bannerCopyFile)
 
@@ -79,10 +83,13 @@ func GenerateSSLConfig(opt types.ConfigOptions) (string, error) {
 
 	remoteSSH := opt.SSHBackendPort
 	if remoteSSH <= 0 {
-		remoteSSH = 22
+		remoteSSH = installer.GetSSHBackendPort()
+	}
+	if remoteSSH <= 0 {
+		remoteSSH = 22 // Only fallback to 22 if we can't determine the actual port
 	}
 
-	localStunnelPort := 2222
+	localStunnelPort := tbssh.TLSClientLocalSSHPort()
 	stunnelClientConf := filepath.Join(configsDir, "stunnel-client.conf")
 	_ = installer.WriteStunnelClientConfig(stunnelClientConf, opt.ServerAddr, opt.Port, localStunnelPort, opt.Sni)
 
@@ -145,17 +152,21 @@ func GenerateWSSConfig(opt types.ConfigOptions) (string, error) {
 
 	installer.BestEffortConfigureSSHBanner(sshWelcome)
 
-	localPort := 2222
+	// Local bind on the *client* (ssh -p <localPort>); not the server's SSH listen port.
+	localPort := tbssh.WSSClientLocalSSHPort()
 	remoteSSH := opt.SSHBackendPort
 	if remoteSSH <= 0 {
-		remoteSSH = 22
+		remoteSSH = installer.GetSSHBackendPort()
+	}
+	if remoteSSH <= 0 {
+		remoteSSH = 22 // Only fallback to 22 if we can't determine the actual port
 	}
 	// wstunnel v10: -L tcp://localPort:remoteHost:remotePort
 	wstunnelCommand := fmt.Sprintf("wstunnel client -L tcp://127.0.0.1:%d:127.0.0.1:%d wss://%s:%d", localPort, remoteSSH, opt.ServerAddr, opt.Port)
 	if opt.Sni != "" {
 		// Use -H "Host: <SNI>" as recommended for stealth (fake SNI / Host Header)
 		wstunnelCommand += fmt.Sprintf(" -H \"Host: %s\"", opt.Sni)
-		// Also keep --tls-sni-override for actual TLS SNI if needed, 
+		// Also keep --tls-sni-override for actual TLS SNI if needed,
 		// but -H is often what's used for the 'Fake' part.
 		wstunnelCommand += fmt.Sprintf(" --tls-sni-override %s", opt.Sni)
 	}
@@ -170,7 +181,8 @@ Server:   %s:%d
 SNI/Host: %s
 User:     %s
 Password: %s
-# Server-side SSH port (wstunnel --restrict-to target): %d
+# Server-side SSH port (through tunnel; embedded listener): %d
+# Client-side local port (wstunnel -L and ssh -p): %d
 
 RUN THIS FIRST (IMPORTANT) to start the WebSocket tunnel:
 %s
@@ -186,6 +198,7 @@ Optional UDPGW port: 7300
 Welcome: %s
 `, opt.ServerAddr, opt.Port, sniForUi, sshUser, sshPass,
 		remoteSSH,
+		localPort,
 		wstunnelCommand,
 		localPort, sshUser,
 		firstLine)

@@ -1,7 +1,6 @@
 package provision
 
 import (
-	"fmt"
 	"log/slog"
 
 	"tunnelbypass/core/transport"
@@ -30,7 +29,7 @@ func init() {
 	transport.RegisterProvision("udpgw", nil, func(log *slog.Logger, opt types.ConfigOptions, _, _ string) (transport.Result, error) {
 		_ = log
 		_ = opt
-		var r transport.Result
-		return r, fmt.Errorf("provision: transport udpgw has no config files to generate")
+		// Standalone UDPGW has no config files; engine still runs portable.RunNamed("udpgw", ...).
+		return transport.Result{}, nil
 	})
 }

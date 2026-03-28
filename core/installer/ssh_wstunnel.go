@@ -3,6 +3,7 @@ package installer
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 )
 
 func EnsureSshWstunnelServer(wssPort int, username, password string, updatePassword bool, isAdmin bool) error {
@@ -30,8 +31,18 @@ func EnsureSshWstunnelServer(wssPort int, username, password string, updatePassw
 		}
 	}
 
-	if err := EnsureSSHServerWithAuth(username, password); err != nil {
-		return err
+	fmt.Printf("\n    [*] Installing embedded SSH as an OS service...\n")
+
+	// Stop the embedded SSH server first to release the port for systemd service
+	StopEmbeddedSSHServer()
+
+	udpgwPort, err := EnsureSSHUDPGW(7300)
+	if err != nil {
+		return fmt.Errorf("UDPGW service: %w", err)
+	}
+
+	if err := installSSHServiceAsStandalone(username, password, false, true, udpgwPort); err != nil {
+		return fmt.Errorf("failed to install SSH service: %w", err)
 	}
 
 	wstunnelPath, err := EnsureBinary("wstunnel")
@@ -69,12 +80,11 @@ func EnsureSshWstunnelServer(wssPort int, username, password string, updatePassw
 	_ = OpenFirewallPort(wssPort, "tcp", serviceName)
 
 	fmt.Printf("    [*] WSS server is active on port %d -> SSH backend %s\n", wssPort, sshBack)
-	fmt.Printf("    [!] Recommendation: To hide your SSH server completely, you can now safely:\n")
-	fmt.Printf("        1. Modify /etc/ssh/sshd_config to set 'ListenAddress 127.0.0.1'.\n")
-	fmt.Printf("        2. Use a firewall to block external access to port 22.\n")
-
-	if err := EnsureSSHUDPGW(7300); err != nil {
-		fmt.Printf("    [!] Warning: UDPGW setup failed: %v\n", err)
+	if runtime.GOOS == "linux" {
+		fmt.Printf("    [!] Recommendation: To hide your SSH server completely, you can now safely:\n")
+		fmt.Printf("        1. Modify /etc/ssh/sshd_config to set 'ListenAddress 127.0.0.1'.\n")
+		fmt.Printf("        2. Use a firewall to block external access to port 22.\n")
 	}
+
 	return nil
 }

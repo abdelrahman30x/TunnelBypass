@@ -7,26 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
-// StartSOCKS5IfConfigured starts a TCP-only SOCKS5 listener on TB_EMBED_SOCKS5 (e.g. 127.0.0.1:1080) until ctx ends.
+// StartSOCKS5IfConfigured is reserved; SOCKS5 is not configured via environment.
 func StartSOCKS5IfConfigured(ctx context.Context, log *slog.Logger) {
-	addr := strings.TrimSpace(os.Getenv("TB_EMBED_SOCKS5"))
-	if addr == "" {
-		return
-	}
-	if log == nil {
-		log = slog.Default()
-	}
-	go func() {
-		if err := serveSOCKS5(ctx, addr, log.With("component", "socks5")); err != nil && ctx.Err() == nil {
-			log.Error("socks5: server exited", "addr", addr, "err", err)
-		}
-	}()
+	_ = ctx
+	_ = log
 }
 
 func serveSOCKS5(ctx context.Context, listenAddr string, log *slog.Logger) error {

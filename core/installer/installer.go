@@ -278,7 +278,9 @@ func ensureOpenSSLUnix() error {
 		if _, err := exec.LookPath(c[0]); err != nil {
 			continue
 		}
-		_ = exec.Command(c[0], c[1:]...).Run()
+		cmd := exec.Command(c[0], c[1:]...)
+		cmd.Env = envForPkgManager(c[0])
+		_ = cmd.Run()
 		if _, err := exec.LookPath("openssl"); err == nil {
 			return nil
 		}

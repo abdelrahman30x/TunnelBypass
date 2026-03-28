@@ -23,11 +23,17 @@ func RunSSHStack(ctx context.Context, log *slog.Logger, sshPort, udpgwPort int, 
 	if udpgwPort <= 0 {
 		udpgwPort = 7300
 	}
-	if sshPort <= 0 {
-		sshPort = tbssh.ListenPreference()
+	pref := sshPort
+	if pref <= 0 {
+		pref = tbssh.ListenPreference()
+	}
+	wanted22 := pref == 22
+	pref = tbssh.SanitizeEmbeddedListenPort(pref)
+	if wanted22 && pref == 0 {
+		log.Info("embedded ssh: not using port 22 (conflicts with system sshd by default)")
 	}
 	udpgwPort = installer.EnsureFreeTCPPort(udpgwPort, "UDPGW")
-	sshPort = installer.EnsureFreeTCPPort(sshPort, "sshembed")
+	sshPort = installer.EnsureFreeTCPPort(pref, "sshembed")
 
 	u, pw := resolveEmbedCredentials(username, password)
 
@@ -58,7 +64,7 @@ func RunSSHStack(ctx context.Context, log *slog.Logger, sshPort, udpgwPort int, 
 		err := udpgw.Run(udpgwCtx, udpgw.Options{Port: udpgwPort, Logger: udgwLog})
 		if err != nil && udpgwCtx.Err() == nil {
 			udgwLog.Error("udpgw: exited unexpectedly", "err", err,
-				"hint", "check TB_UDPGW_* env and port conflicts; clients need TCP forward to this port over SSH")
+				"hint", "check UDPGW port conflicts; clients need TCP forward to this port over SSH")
 		} else {
 			udgwLog.Info("udpgw: stopped", "reason", "context_done_or_normal")
 		}
@@ -93,7 +99,8 @@ func RunSSHStack(ctx context.Context, log *slog.Logger, sshPort, udpgwPort int, 
 	return errSSH
 }
 
-// RunEmbeddedSSH runs only the embedded SSH listener; UDPGW must already be listening on udpgwPort.
+// RunEmbeddedSSH runs only the embedded SSH listener; UDPGW is optional.
+// If udpgwPort > 0, it waits briefly for UDPGW but continues if not found.
 func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort int, username, password string) error {
 	if log == nil {
 		log = slog.Default()
@@ -101,15 +108,23 @@ func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort in
 	if udpgwPort <= 0 {
 		udpgwPort = 7300
 	}
-	if sshPort <= 0 {
-		sshPort = tbssh.ListenPreference()
+	pref := sshPort
+	if pref <= 0 {
+		pref = tbssh.ListenPreference()
 	}
-	sshPort = installer.EnsureFreeTCPPort(sshPort, "sshembed")
+	wanted22 := pref == 22
+	pref = tbssh.SanitizeEmbeddedListenPort(pref)
+	if wanted22 && pref == 0 {
+		log.Info("embedded ssh: not using port 22 (conflicts with system sshd by default)")
+	}
+	sshPort = installer.EnsureFreeTCPPort(pref, "sshembed")
 
 	u, pw := resolveEmbedCredentials(username, password)
 
 	keyDir := installer.GetConfigDir("ssh")
 	if err := os.MkdirAll(keyDir, 0755); err != nil {
+		log.Error("portable ssh embed: failed to create SSH config directory",
+			"path", keyDir, "err", err)
 		return fmt.Errorf("ssh configs dir: %w", err)
 	}
 	keyPath := filepath.Join(keyDir, "embed_host_key")
@@ -118,12 +133,26 @@ func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort in
 	log.Info("portable ssh embed: starting",
 		"pid", os.Getpid(),
 		"data_dir", installer.GetBaseDir(),
+		"ssh_config_dir", keyDir,
+		"ssh_key_path", keyPath,
 		"udpgw_tcp_port", udpgwPort,
 		"ssh_listen_port", sshPort,
-		"ssh_user", u)
+		"ssh_user", u,
+		"ssh_password_set", pw != "")
 
+	// Check if key file exists
+	if _, err := os.Stat(keyPath); err != nil {
+		log.Info("portable ssh embed: SSH host key will be generated on first connection",
+			"path", keyPath)
+	} else {
+		log.Info("portable ssh embed: SSH host key found", "path", keyPath)
+	}
+
+	// UDPGW is optional - wait briefly but don't fail if not present
 	if err := waitUDPGWListenShort(ctx, udpgwPort, log); err != nil {
-		return err
+		log.Info("portable ssh embed: UDPGW not available, continuing without it",
+			"udpgw_port", udpgwPort,
+			"hint", "UDPGW is optional; SSH will work without it")
 	}
 
 	_ = WriteRunMeta(installer.GetBaseDir(), "ssh", RunMeta{
@@ -141,27 +170,25 @@ func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort in
 	}
 	if errSSH != nil {
 		sshLog.Error("embedded ssh: error", "err", errSSH)
+		log.Error("portable ssh embed: stopped with error", "pid", os.Getpid(), "err", errSSH)
 	} else {
 		sshLog.Info("embedded ssh: listener closed", "pid", os.Getpid())
+		log.Info("portable ssh embed: stopped normally", "pid", os.Getpid())
 	}
-	log.Info("portable ssh embed: stopped", "pid", os.Getpid())
 	return errSSH
 }
 
 func resolveEmbedCredentials(username, password string) (u, pw string) {
 	u = strings.TrimSpace(username)
 	if u == "" {
-		u = strings.TrimSpace(os.Getenv("TB_SSH_USER"))
-	}
-	if u == "" {
-		u = strings.TrimSpace(os.Getenv("TB_EMBED_SSH_USER"))
+		u = strings.TrimSpace(os.Getenv("TUNNELBYPASS_SSH_USER"))
 	}
 	if u == "" {
 		u = "tunnelbypass"
 	}
 	pw = strings.TrimSpace(password)
 	if pw == "" {
-		pw = strings.TrimSpace(os.Getenv("TB_SSH_PASSWORD"))
+		pw = strings.TrimSpace(os.Getenv("TUNNELBYPASS_SSH_PASSWORD"))
 	}
 	if pw == "" {
 		pw = installer.ReadOrCreateEmbedSSHPassword()
@@ -208,13 +235,16 @@ func waitUDPGWListenShort(ctx context.Context, udpgwPort int, log *slog.Logger) 
 }
 
 func runEmbedSSHListener(ctx context.Context, sshLog *slog.Logger, sshPort, udpgwPort int, u, pw, keyPath string) error {
-	sshLog.Info("embedded ssh: listening", "addr", fmt.Sprintf("0.0.0.0:%d", sshPort), "user", u,
+	// Bind to localhost only for security (internal port should not be accessible externally)
+	listenAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
+	
+	sshLog.Info("embedded ssh: listening", "addr", listenAddr, "user", u,
 		"udpgw_tcp", fmt.Sprintf("127.0.0.1:%d", udpgwPort),
 		"pid", os.Getpid(),
-		"hint", "Clients: SSH to this host:ssh_port; for UDP over SSH forward local TCP to 127.0.0.1:udpgw_port on the server")
+		"hint", "Internal SSH - access via forwarder on external port only")
 
 	cfg := tbssh.Config{
-		ListenAddr: fmt.Sprintf("0.0.0.0:%d", sshPort),
+		ListenAddr: listenAddr,
 		Username:   u,
 		Password:   pw,
 		KeyPath:    keyPath,

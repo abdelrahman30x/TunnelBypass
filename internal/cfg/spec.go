@@ -35,6 +35,8 @@ type RunSpec struct {
 	UDPGW struct {
 		Enabled bool `json:"enabled"`
 		Port    int  `json:"port"`
+		// External: UDPGW is provided separately (e.g. TunnelBypass-UDPGW); `run ssh` must not bind udpgw in-process.
+		External bool `json:"external,omitempty"`
 	} `json:"udpgw"`
 
 	Behavior struct {
@@ -98,6 +100,9 @@ func Merge(base, override RunSpec) RunSpec {
 	if override.UDPGW.Port != 0 {
 		out.UDPGW.Port = override.UDPGW.Port
 	}
+	if override.UDPGW.External {
+		out.UDPGW.External = true
+	}
 	if override.Behavior.Portable {
 		out.Behavior.Portable = true
 	}
@@ -143,7 +148,8 @@ func NormalizeTransport(t string) string {
 
 func IsDisabled(t string) bool {
 	switch NormalizeTransport(t) {
-	case "ssh", "wss", "tls":
+	case "wireguard":
+		// Temporary: disable new installs from wizard/CLI until NAT/DNS issues are resolved.
 		return true
 	default:
 		return false
@@ -193,13 +199,16 @@ func FillDefaults(s *RunSpec) {
 		case "wireguard":
 			s.Port = 51820
 		case "ssh":
-			s.Port = 22
+			// SSH uses dynamic port allocation (0 triggers auto-assignment)
+			// Don't default to 22 to avoid conflicts with system SSH
+			s.Port = 0
 		}
 	}
 	if s.SSH.Port == 0 {
 		switch s.Transport {
-		case "wss", "tls":
-			s.SSH.Port = 22
+		case "wss", "tls", "ssh":
+			// Use dynamic port allocation for SSH backend (0 triggers auto-assignment)
+			s.SSH.Port = 0
 		default:
 			s.SSH.Port = s.Port
 		}

@@ -1,189 +1,68 @@
 # TunnelBypass
 
-CLI to install and run tunnel stacks on **Windows** and **Linux**: VLESS (Reality), Hysteria v2, WireGuard, SSH / stunnel / wstunnel. Interactive wizard, dependency downloads, firewall hints, and **systemd** / **WinSW** (or **user-mode**) supervision. Configs and keys live under a data directory.
+**What it is:** A command-line tool that sets up VPN-style tunnels on a server (Windows or Linux): it can walk you through setup, generate configs, download helpers (Xray, Hysteria, etc.), and optionally install OS services. You run it on the machine that **ends** the tunnel; clients import the generated configs or links.
 
-Run it on the host that terminates the tunnel, then import generated client configs or URLs on phones/desktops.
+**What it is not:** It is not the tunnel protocol itself—throughput is handled by the bundled/external binaries you choose (VLESS/Reality, Hysteria, WireGuard, SSH / stunnel / wstunnel, …).
 
-## Philosophy
+---
 
-- Small setup surface: wizard, generated configs, optional OS services.
-- Go orchestrates and writes configs; protocol throughput is in external binaries (Xray, Hysteria, etc.).
-- Useful on restrictive networks (TLS/SNI camouflage, several stack shapes).
+## Quickstart (from source)
 
-## Quickstart
+**Go 1.25+** — see `go.mod`. From the repository root:
 
 ```bash
-go build -o tunnelbypass ./cmd
+go build -trimpath -ldflags "-s -w" -o tunnelbypass ./cmd
 ./tunnelbypass --version
 ./tunnelbypass
 ```
 
-Non-interactive example: `TB_PORTABLE=1 ./tunnelbypass run ssh` (see **Run** below).
+Optional: set the reported version with e.g. `-ldflags "-s -w -X main.Version=v1.2.1"` (same `go build` line, extend the flags).
 
-## Build
+Non-interactive example: `./tunnelbypass run portable ssh` or `./tunnelbypass run --data-dir <path> ssh` (see **Run** below).
 
-Use `make` or `go build` directly. Requires **Go 1.25+** (`go.mod`).
+## Elevation & data layout (short)
 
-To embed the current version (e.g. `v1.2.0`), add `-ldflags "-X main.Version=v1.2.0"`.
-
-| Scenario | Command |
-|----------|---------|
-| Linux/macOS — native binary | `go build -trimpath -ldflags "-s -w -X main.Version=$(git describe --tags --abbrev=0 || echo v0.0.0)" -o tunnelbypass ./cmd` |
-| Linux/macOS — cross-compile Windows | `GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=$(git describe --tags --abbrev=0 || echo v0.0.0)" -o tunnelbypass.exe ./cmd` <br> (or `make build-windows`) |
-| Windows (PowerShell) — native binary | `go build -trimpath -ldflags "-s -w -X main.Version=$(git describe --tags --abbrev=0 || echo v0.0.0)" -o tunnelbypass.exe ./cmd` <br> (or `.\scripts\build.ps1`) |
-| Windows (PowerShell) — cross-compile Linux | `$env:GOOS='linux'; $env:GOARCH='amd64'; go build -trimpath -ldflags "-s -w -X main.Version=$(git describe --tags --abbrev=0 || echo v0.0.0)" -o tunnelbypass ./cmd` |
-
-Note: `$(git describe --tags --abbrev=0 || echo v0.0.0)` sets the version from the latest Git tag, or `v0.0.0` if no tags exist.
-
-
-## Elevation and portable mode
-
-**Note:** UAC/sudo may re-exec for elevation; `TB_PORTABLE`, `TB_DATA_DIR`, Docker, and service installs affect layout and permissions.
-
-- Non-portable `run` for service-capable transports may elevate once so WinSW/systemd and firewall rules can run; use `--no-elevate`, `TB_NO_ELEVATE=1`, or `run portable` to stay in the current session.
-- `TB_PORTABLE=1` and `TB_DATA_DIR` select a user-writable data layout.
+- Some `run` modes ask for **admin/root** once (service + firewall). Use `--no-elevate` or `run portable` to stay in the current user session.
+- **`--portable`** / **`--data-dir`** / Docker **`TUNNELBYPASS_DATA_DIR`** choose where configs and logs live.
 
 ## Direct download (GitHub releases)
 
-Repo: [https://github.com/abdelrahman30x/TunnelBypass](https://github.com/abdelrahman30x/TunnelBypass) — [latest release](https://github.com/abdelrahman30x/TunnelBypass/releases/latest).
+Repo: [TunnelBypass](https://github.com/abdelrahman30x/TunnelBypass) — [latest release](https://github.com/abdelrahman30x/TunnelBypass/releases/latest).
 
-### Quick Install (v1.2.0)
-```bash
-# Linux (amd64)
-curl -L -o tb.tar.gz https://github.com/abdelrahman30x/TunnelBypass/releases/download/v1.2.0/tunnelbypass_v1.2.0_linux_amd64.tar.gz && tar -xzf tb.tar.gz && ./tunnelbypass
+### Install (recommended)
 
-# Windows
-# Download: https://github.com/abdelrahman30x/TunnelBypass/releases/download/v1.2.0/tunnelbypass_v1.2.0_windows_amd64.exe
-```
-
-Release asset names vary by pipeline; adjust the filters below if your archive uses different patterns (e.g. `.zip` — unpack after download). Requires a published release with binaries attached.
-
-### Suggested Release Asset Naming
-
-For a `v1.2.0` release (or `$(git describe --tags --abbrev=0 || echo v0.0.0)` for the actual version):
-
-| OS | Suggested Filename | Contents |
-|----|--------------------|----------|
-| Linux (amd64) | `tunnelbypass_v1.2.0_linux_amd64.tar.gz` | `tunnelbypass` (executable) |
-| Linux (arm64) | `tunnelbypass_v1.2.0_linux_arm64.tar.gz` | `tunnelbypass` (executable) |
-| Windows (amd64) | `tunnelbypass_v1.2.0_windows_amd64.exe` | `tunnelbypass.exe` (executable) |
-| Windows (arm64) | `tunnelbypass_v1.2.0_windows_arm64.exe` | `tunnelbypass.exe` (executable) |
-| macOS (Intel) | `tunnelbypass_v1.2.0_darwin_amd64.tar.gz` | `tunnelbypass` (executable) |
-| macOS (Apple Silicon)| `tunnelbypass_v1.2.0_darwin_arm64.tar.gz` | `tunnelbypass` (executable) |
-
-Example `gh release` command to create a release and upload assets:
+**Linux / macOS**
 
 ```bash
-VERSION=$(git describe --tags --abbrev=0 || echo v0.0.0)
-gh release create $VERSION \
-  tunnelbypass_${VERSION}_linux_amd64.tar.gz#"TunnelBypass for Linux (AMD64)" \
-  tunnelbypass_${VERSION}_linux_arm64.tar.gz#"TunnelBypass for Linux (ARM64)" \
-  tunnelbypass_${VERSION}_windows_amd64.exe#"TunnelBypass for Windows (AMD64)" \
-  tunnelbypass_${VERSION}_windows_arm64.exe#"TunnelBypass for Windows (ARM64)" \
-  tunnelbypass_${VERSION}_darwin_amd64.tar.gz#"TunnelBypass for macOS (Intel)" \
-  tunnelbypass_${VERSION}_darwin_arm64.tar.gz#"TunnelBypass for macOS (Apple Silicon)" \
-  --title "Release $VERSION" --notes "See CHANGELOG.md for details."
+curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 ```
 
-### Windows (PowerShell)
+Optional: install into a directory on `PATH`:
+
+```bash
+INSTALL_PREFIX="$HOME/.local/bin" curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
+```
+
+**Windows (PowerShell)**
 
 ```powershell
-$owner = "abdelrahman30x"; $repo = "TunnelBypass"
-$url = "https://api.github.com/repos/$owner/$repo/releases/latest"
-# Fetch latest release and pick the asset (robust to dirty JSON)
-$rel = Invoke-RestMethod -Uri $url -Headers @{ "User-Agent" = "TunnelBypass-Setup" }
-$asset = $rel.assets | Where-Object { $_.name -match 'windows.*amd64\.exe$' -or ($_.name -match '\.exe$' -and $_.name -notmatch 'linux|darwin') } | Select-Object -First 1
-if (-not $asset) { throw "No matching Windows asset found. Please check: https://github.com/$owner/$repo/releases/latest" }
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $asset.name
-if ($asset.name -match '\.zip$') {
-  Expand-Archive -Path $asset.name -DestinationPath . -Force
-  Get-ChildItem -Filter "tunnelbypass*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { Copy-Item $_.FullName -Destination ".\tunnelbypass.exe" -Force }
-} elseif ($asset.name -match '\.exe$') {
-  Copy-Item $asset.name -Destination ".\tunnelbypass.exe" -Force
-}
-.\tunnelbypass.exe --version
+irm https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.ps1 | iex
 ```
 
-### Linux (bash)
+If execution policy blocks: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then run the same `irm ... | iex` again.
 
-```bash
-OWNER=abdelrahman30x REPO=TunnelBypass
+Optional folder:
 
-# Pick a pattern based on architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-  aarch64|arm64) PAT='linux.*arm64' ;;
-  x86_64|amd64)  PAT='linux.*amd64' ;;
-  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-esac
-
-URL=$(curl -fsSL "https://api.github.com/repos/${OWNER}/${REPO}/releases/latest" | \
-  grep "browser_download_url" | grep -iE "$PAT" | head -1 | cut -d '"' -f 4)
-test -n "$URL" || { echo "No $PAT asset found; check the releases page." >&2; exit 1; }
-
-curl -fsSL -o tb-download "$URL"
-case "$URL" in
-  *.tar.gz|*.tgz) tar -xzf tb-download && rm -f tb-download ;;
-  *.zip) unzip -o tb-download && rm -f tb-download ;;
-  *) mv tb-download tunnelbypass ;;
-esac
-chmod +x tunnelbypass 2>/dev/null || true
-./tunnelbypass --version
+```powershell
+$env:INSTALL_PREFIX = "$env:LOCALAPPDATA\Programs\TunnelBypass"
+irm https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.ps1 | iex
 ```
 
-### macOS (bash)
-
-```bash
-OWNER=abdelrahman30x REPO=TunnelBypass
-# Pick a pattern based on architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-  arm64) PAT='darwin.*(arm64|aarch64)';;
-  *)     PAT='darwin.*(amd64|x86_64)';;
-esac
-URL=$(curl -fsSL "https://api.github.com/repos/${OWNER}/${REPO}/releases/latest" | \
-  grep "browser_download_url" | grep -iE "$PAT" | head -1 | cut -d '"' -f 4)
-test -n "$URL" || { echo "No macOS asset for $ARCH; download manually." >&2; exit 1; }
-curl -fsSL -o tb-download "$URL"
-case "$URL" in
-  *.tar.gz|*.tgz) tar -xzf tb-download && rm -f tb-download ;;
-  *.zip) unzip -o tb-download && rm -f tb-download ;;
-  *) mv tb-download tunnelbypass ;;
-esac
-chmod +x tunnelbypass
-./tunnelbypass --version
-```
-
-### GitHub CLI (optional)
-
-```bash
-gh release download --repo abdelrahman30x/TunnelBypass --clobber
-```
-
-Then run the binary that matches your OS from the current directory.
-
-### Example `run` commands (non-interactive)
-
-Wizard order and rough DPI-bypass strength (more stars ≈ stronger camouflage on hostile networks). On Windows use `.\tunnelbypass.exe` instead of `./tunnelbypass`. Add `--data-dir <path>` or `TB_PORTABLE=1` when you need a fixed or user-writable data root.
-
-| | Stack | Strength | Example |
-|---|--------|----------|---------|
-| 1 | Reality / XTLS | ★★★★★ | `./tunnelbypass run --type reality --port 443 --sni epicgames.com --uuid auto` |
-| 2 | WSS (wstunnel) | ★★★★ | `./tunnelbypass run --type wss --port 443 --sni epicgames.com` |
-| 3 | TLS (stunnel) | ★★★ | `./tunnelbypass run --type tls --port 443 --sni epicgames.com` |
-| 4 | QUIC (Hysteria v2) | ★★ | `./tunnelbypass run --type hysteria --port 443 --sni epicgames.com --uuid auto` |
-| 5 | SSH | ★★ | `./tunnelbypass run ssh` |
-| 6 | WireGuard | ★ | `./tunnelbypass run --type wireguard --port 51820 --sni example.com` |
-|   |           |   |                                                                  |
-
-**Portable Mode** (No elevation, no service install, same session):
-`./tunnelbypass run portable <transport_name> [flags]`
+Source: [`scripts/install.sh`](scripts/install.sh), [`scripts/install.ps1`](scripts/install.ps1) — they resolve **latest** release, OS/arch, unpack, and place the binary; optional env: `INSTALL_PREFIX`, `INSTALL_VERSION` (pin a tag), `INSTALL_OWNER` / `INSTALL_REPO` (forks).
 
 ## Docker
 
-Image uses non-root user, `TB_DATA_DIR=/data`, `TB_PORTABLE=1`, default `TB_LOG=json`. Map ports your transport needs.
-
-**Note:** Prefer `docker run ... tunnelbypass:local run <transport>`; wizard service installs are unreliable in containers.
+Image sets **`TUNNELBYPASS_DATA_DIR=/data`**. Map whatever ports your transport uses. For servers in containers, prefer `docker run ... tunnelbypass:local run <transport>` (wizard “install service” is a poor fit inside Docker).
 
 ```bash
 docker build -t tunnelbypass:local .
@@ -191,13 +70,27 @@ docker run -it --rm -v tbdata:/data tunnelbypass:local
 docker run --rm -v tbdata:/data tunnelbypass:local run hysteria
 ```
 
-See [docker-compose.yml](docker-compose.yml), [docker/env.example](docker/env.example).
+[docker-compose.yml](docker-compose.yml), [docker/env.example](docker/env.example).
 
 ## Run
 
+Non-interactive examples, ordered by how well they blend in on **strict / filtered networks** (more ★ = stronger camouflage). On Windows, use `.\tunnelbypass.exe` instead of `./tunnelbypass`. Add `--data-dir <path>` or `run portable` when you want a user-writable data folder.
+
+| Protocol | Camouflage | One-liner |
+| :-- | :-: | :-- |
+| **Reality / XTLS** | ★★★★★ | `./tunnelbypass run --type reality --port 443 --sni epicgames.com --uuid auto` |
+| **WSS** (wstunnel) | ★★★★ | `./tunnelbypass run --type wss --port 443 --sni epicgames.com` |
+| **TLS** (stunnel) | ★★★ | `./tunnelbypass run --type tls --port 443 --sni epicgames.com` |
+| **Hysteria v2** (QUIC) | ★★ | `./tunnelbypass run --type hysteria --port 443 --sni epicgames.com --uuid auto` |
+| **SSH** | ★★ | `./tunnelbypass run ssh` |
+| **WireGuard** | ★ | `./tunnelbypass run --type wireguard --port 51820 --sni example.com` |
+
+**Portable run** (foreground, same session, no OS service install):  
+`./tunnelbypass run portable <transport> [flags]`
+
 ```text
 tunnelbypass              # wizard
-tunnelbypass run -help     # portable / flags
+tunnelbypass run -help     # all run flags
 tunnelbypass generate      # configs only
 tunnelbypass uninstall
 tunnelbypass status | health
@@ -205,18 +98,17 @@ tunnelbypass deps-tree [--mermaid] <transport>
 tunnelbypass xray-svc | hysteria-svc | udpgw-svc   # service helpers
 ```
 
-**Portable / CI:** use `TB_LOG=json` for structured logs; see `tunnelbypass run -help` for flags, exit behavior, dependency order, and `--install-service`.
+Full details: `tunnelbypass run -help` (dependencies, `--install-service`, exit behavior).
 
 ```bash
 tunnelbypass run ssh
 tunnelbypass run --daemon ssh
 tunnelbypass run portable reality --port 443 --sni example.com --uuid auto
-# Or use the transport name directly as the first argument after 'portable'
 tunnelbypass run portable ssh
 tunnelbypass run --data-dir /data --type reality --port 443 --sni example.com --uuid auto --dry-run
 ```
 
-Default data root without `--config`/`--spec`: `%LOCALAPPDATA%\TunnelBypass` / `~/.local/share/tunnelbypass`. Use `--system-data` or `--config` JSON for system-wide paths (see **Data dirs**).
+Default data root without `--config` / `--spec`: `%LOCALAPPDATA%\TunnelBypass` / `~/.local/share/tunnelbypass`. Use `--system-data` or `--config` for system-wide paths (see **Data dirs**).
 
 ## Uninstall, generate, deps-tree
 
@@ -227,29 +119,28 @@ Default data root without `--config`/`--spec`: `%LOCALAPPDATA%\TunnelBypass` / `
 | `generate` | Same flags as `run`, configs only (no listener) |
 | `deps-tree` | Dependency graph; `--mermaid` for a diagram |
 
-`tunnelbypass uninstall --type reality --data-dir /data --yes` — **`--yes`** required when stdin is not a TTY.
+`tunnelbypass uninstall --type reality --data-dir /data --yes` — **`--yes`** if stdin is not a TTY.
 
 ## Troubleshooting
 
 ```bash
 tunnelbypass --debug wizard
-TB_DEBUG=1 tunnelbypass wizard
-TB_LOG=json tunnelbypass run ssh
+tunnelbypass run -help
 ```
 
-## Layout
+## Repository layout (for contributors)
 
-- `cmd/` — binary (`internal/cli`)
+- `cmd/` — entry binary → `internal/cli`
 - `core/provision` — config generation for `run`
 - `internal/cfg` — `RunSpec`, `--config`, `--spec`
 - `core/installer` — paths, downloads, TLS, services, SSH stack
 - `core/svcman` — systemd / WinSW / user supervisor
-- `core/udpgw` — UDPGW (internal + optional external binary)
+- `core/udpgw` — UDPGW
 - `core/ssh` — embedded SSH when system OpenSSH is missing
 - `core/binmgr` — optional SHA-256 manifests (`checksums.json`)
 - `core/transports/*` — per-protocol config writers
 - `internal/*` — helpers (`runtimeenv`, `tblog`, …)
-- `tools/host_catalog` — SNI / bug-host data
+- `tools/host_catalog` — SNI / host data
 
 ## Data dirs
 
@@ -258,11 +149,11 @@ TB_LOG=json tunnelbypass run ssh
 | Windows | `C:\TunnelBypass\` |
 | Linux | `/usr/local/etc/tunnelbypass/` |
 
-Default `run` uses the per-user portable-style base unless `--system-data` or `paths.data_dir` in `--config`. Under base: `configs/<protocol>/`, `logs/`, `run/`.
+Default `run` uses the per-user base unless `--system-data` or `paths.data_dir` in `--config`. Under base: `configs/<protocol>/`, `logs/`, `run/`.
 
 ## Clients
 
-v2rayN / NekoBox / Sing-Box (VLESS, Hysteria); WireGuard app (`.conf`); SSH clients for plain / TLS / WSS. Self-signed TLS paths: allow insecure in the client.
+v2rayN / NekoBox / Sing-Box (VLESS, Hysteria); WireGuard app; SSH clients for plain / TLS / WSS. Self-signed TLS: allow insecure in the client if you used self-signed certs.
 
 ## License
 

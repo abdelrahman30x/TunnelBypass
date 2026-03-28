@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"tunnelbypass/core/installer"
 	tbssh "tunnelbypass/core/ssh"
-	"tunnelbypass/internal/tblog"
 )
 
 func probeTCPWithRetry(ctx context.Context, addr string, log *slog.Logger, label string) error {
-	timeout := time.Duration(tblog.IntFromEnv("TB_PROBE_TIMEOUT_MS", 3000)) * time.Millisecond
-	retries := tblog.IntFromEnv("TB_PROBE_RETRIES", 5)
+	timeout := 3000 * time.Millisecond
+	retries := 5
 	if retries < 1 {
 		retries = 1
 	}
@@ -52,6 +49,34 @@ func probeTCPWithRetry(ctx context.Context, addr string, log *slog.Logger, label
 	return fmt.Errorf("tcp probe %s after %d attempts: %w", addr, retries, lastErr)
 }
 
+// sshDependencyListenAddr resolves 127.0.0.1:port for embedded SSH (same rules as ssh_stack:
+// port 22 is avoided when it would conflict with system sshd; dynamic ports are read from run metadata).
+func sshDependencyListenAddr(ctx context.Context, o Options) (string, error) {
+	p := o.SSHPort
+	if p <= 0 {
+		p = tbssh.ListenPreference()
+	}
+	p = tbssh.SanitizeEmbeddedListenPort(p)
+	if p > 0 {
+		return fmt.Sprintf("127.0.0.1:%d", p), nil
+	}
+	base := installer.GetBaseDir()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if m, err := ReadRunMeta(base, "ssh"); err == nil && m.Ports != nil {
+			if pp, ok := m.Ports["ssh"]; ok && pp > 0 {
+				return fmt.Sprintf("127.0.0.1:%d", pp), nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(40 * time.Millisecond):
+		}
+	}
+	return "", fmt.Errorf("ssh listen port not available (portable-ssh.meta)")
+}
+
 // Best-effort local TCP probe for named transport.
 func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 	name = strings.ToLower(strings.TrimSpace(name))
@@ -67,11 +92,10 @@ func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 		}
 		return true, ""
 	case "ssh":
-		p := o.SSHPort
-		if p <= 0 {
-			p = tbssh.ListenPreference()
+		addr, err := sshDependencyListenAddr(context.Background(), o)
+		if err != nil {
+			return false, err.Error()
 		}
-		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		if err := probeTCPWithRetry(context.Background(), addr, nil, "ssh"); err != nil {
 			return false, err.Error()
 		}
@@ -100,7 +124,7 @@ func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 }
 
 func probeInterval() time.Duration {
-	ms := tblog.IntFromEnv("TB_PROBE_INTERVAL_MS", 15000)
+	ms := 15000
 	if ms < 3000 {
 		ms = 3000
 	}
@@ -109,9 +133,6 @@ func probeInterval() time.Duration {
 
 // startRegistryProbeLoop updates registry.json with periodic probe results until ctx is done.
 func startRegistryProbeLoop(ctx context.Context, transport string, o Options) {
-	if strings.TrimSpace(os.Getenv("TB_DISABLE_PROBES")) == "1" {
-		return
-	}
 	transport = strings.ToLower(strings.TrimSpace(transport))
 	go func() {
 		tick := time.NewTicker(probeInterval())
@@ -148,24 +169,7 @@ func normalizePortsForOrchestration(deps []string, o *Options) {
 	o.UDPGWPort = installer.EnsureFreeTCPPort(p, "UDPGW")
 }
 
-// ParseInitialBackoffDurations parses TB_SVC_INITIAL_BACKOFF_MS like "1000,2000,5000".
+// ParseInitialBackoffDurations returns nil (custom backoff lists are not configured via environment).
 func ParseInitialBackoffDurations() []time.Duration {
-	s := strings.TrimSpace(os.Getenv("TB_SVC_INITIAL_BACKOFF_MS"))
-	if s == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	var out []time.Duration
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 {
-			continue
-		}
-		out = append(out, time.Duration(n)*time.Millisecond)
-	}
-	return out
+	return nil
 }

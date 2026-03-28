@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/layout"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
 	"tunnelbypass/internal/elevate"
@@ -22,10 +23,7 @@ import (
 )
 
 func wizardSkipElevate() bool {
-	if v := strings.TrimSpace(os.Getenv("TB_SKIP_ELEVATE")); v == "1" || strings.EqualFold(v, "true") {
-		return true
-	}
-	return strings.TrimSpace(os.Getenv("TB_DATA_DIR")) != ""
+	return layout.DataRootOverride() != ""
 }
 
 func printContainerWizardWarning() {
@@ -36,9 +34,9 @@ func printContainerWizardWarning() {
 	fmt.Printf("║  %s[!] Container / Docker detected%s                              ║\n", ColorBold+ColorRed, ColorReset)
 	fmt.Printf("║  %sDo not rely on wizard “services” here — use foreground run.%s ║\n", ColorGray, ColorReset)
 	fmt.Printf("║  %sDetached processes are a poor fit for container PID 1 / CI.%s ║\n", ColorGray, ColorReset)
-	fmt.Printf("║  %sUse instead:%s %stunnelbypass run <transport>%s                 ║\n", ColorGray, ColorReset, ColorBold+ColorGreen, ColorReset)
+	fmt.Printf("║  %sUse instead:%s %s%s run <transport>%s                 ║\n", ColorGray, ColorReset, ColorBold+ColorGreen, utils.AppName(), ColorReset)
 	fmt.Printf("║  %sExample:%s %sdocker run ... run wss%s                         ║\n", ColorGray, ColorReset, ColorCyan, ColorReset)
-	fmt.Printf("║  %sOverride (not recommended):%s TB_ALLOW_SVC_IN_CONTAINER=1      ║\n", ColorGray, ColorReset)
+	fmt.Printf("║  %sService install in containers is not supported here.%s              ║\n", ColorGray, ColorReset)
 	fmt.Printf("%s╚══════════════════════════════════════════════════════════════╝%s\n\n", ColorBold+ColorYellow, ColorReset)
 }
 
@@ -63,10 +61,7 @@ func runWizard() {
 			skipAutoServiceMenuOnce = false
 		} else {
 			all := findInstalledServices()
-			nonUD := filterOutUDPGW(all)
-			if len(all) > 0 && len(nonUD) == 0 {
-				offerUninstallOrphanUDPGW(reader)
-			} else if len(all) == 1 {
+			if len(all) == 1 {
 				shouldExit := showInstalledMenu(reader, all[0])
 				if shouldExit {
 					return
@@ -96,15 +91,21 @@ func runWizard() {
 		case "1":
 			if !elevate.IsAdmin() && !wizardSkipElevate() {
 				if runningViaGoRun() {
-					fmt.Printf("\n%s[!] You are using `go run`. Skipping UAC elevation — otherwise this window would close and the wizard would not continue here.%s\n",
+					fmt.Printf("\n%s[!] You are using `go run`. Skipping elevation — otherwise this window would close and the wizard would not continue here.%s\n",
 						ColorYellow, ColorReset)
-					fmt.Printf("    %sFor installs that need Administrator:%s build a binary then run it elevated:%s\n",
+					fmt.Printf("    %sFor installs that need Administrator/root:%s build a binary then run it elevated:%s\n",
 						ColorGray, ColorReset, ColorReset)
-					fmt.Printf("      %sgo build -o tunnelbypass.exe ./cmd%s\n", ColorBold+ColorCyan, ColorReset)
-					fmt.Printf("      %s.\\tunnelbypass.exe%s  (right-click %sRun as administrator%s, or use an elevated prompt)\n\n",
-						ColorBold, ColorReset, ColorGray, ColorReset)
+					if runtime.GOOS == "windows" {
+						fmt.Printf("      %sgo build -o tunnelbypass.exe ./cmd%s\n", ColorBold+ColorCyan, ColorReset)
+						fmt.Printf("      %s.\\tunnelbypass.exe%s  (right-click %sRun as administrator%s, or use an elevated prompt)\n\n",
+							ColorBold, ColorReset, ColorGray, ColorReset)
+					} else {
+						fmt.Printf("      %sgo build -o tunnelbypass ./cmd%s\n", ColorBold+ColorCyan, ColorReset)
+						fmt.Printf("      %s./tunnelbypass%s  (run with sudo or as root for required permissions)\n\n",
+							ColorBold, ColorReset)
+					}
 				} else {
-					_ = os.Setenv("TB_AUTORUN_SETUP", "1")
+					_ = os.Setenv("TUNNELBYPASS_AUTORUN_SETUP", "1")
 					err := elevate.Elevate()
 					if err != nil {
 						fmt.Printf("\n%s[!] Elevation not available (%v). Continuing with current user; data dir: %s%s\n",
@@ -241,8 +242,8 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	}
 
 	if cfg.IsDisabled(transport) {
-		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled for maintenance due to known bugs.%s\n", ColorRed, transport, ColorReset)
-		fmt.Printf("    %sPlease choose another protocol like Reality (1) or WireGuard (6).%s\n", ColorGray, ColorReset)
+		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled (known issues).%s\n", ColorRed, transport, ColorReset)
+		fmt.Printf("    %sChoose another option, e.g. Reality (1), Hysteria (4), WSS (2), or TLS (3).%s\n", ColorGray, ColorReset)
 		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to selection...%s", ColorGray, ColorReset))
 		return false
 	}
@@ -271,8 +272,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
-	overlayWindowsService := wizardOverlayWindowsService(transport)
-	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || overlayWindowsService
+	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "wss" || transport == "tls"
 
 	if (transport == "ssh" || transport == "wss" || transport == "tls") &&
 		(strings.EqualFold(strings.TrimSpace(sshPass), "auto") || strings.TrimSpace(sshPass) == "") {
@@ -303,9 +303,6 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		rspec.Behavior.GenerateOnly = true
 		rspec.Behavior.AutoStart = false
 	}
-	_ = os.Setenv("TB_UI_PRETTY_RESULT", "1")
-	defer os.Unsetenv("TB_UI_PRETTY_RESULT")
-
 	if err := engine.Run(context.Background(), rspec); err != nil {
 		fmt.Printf("\n%s✗ Setup failed: %v%s\n", ColorRed, err, ColorReset)
 		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to Main Menu...%s", ColorGray, ColorReset))
@@ -385,19 +382,6 @@ func preferredServiceNameForTransport(transport string) string {
 	}
 }
 
-func wizardOverlayWindowsService(transport string) bool {
-	t := strings.ToLower(strings.TrimSpace(transport))
-	if t != "wss" && t != "tls" {
-		return false
-	}
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	if runtimeenv.InContainer() {
-		return false
-	}
-	return elevate.IsAdmin()
-}
 
 func formatDisabled(t string) string {
 	if cfg.IsDisabled(t) {

@@ -43,24 +43,33 @@ func OpenFirewallPort(port int, protocol, name string) error {
 	}
 
 	fmt.Printf("[*] Opening firewall rule '%s' port %d (%s)...\n", ruleName, port, protocol)
+	ufwActive := false
 	if _, err := exec.LookPath("ufw"); err == nil {
+		out, _ := exec.Command("ufw", "status").CombinedOutput()
+		ufwActive = strings.Contains(string(out), "Status: active")
+		// Pre-create rule if user later enables ufw
 		_ = exec.Command("ufw", "allow", fmt.Sprintf("%d/%s", port, protocol)).Run()
-		return nil
 	}
+	firewalldRunning := false
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		_ = exec.Command("firewall-cmd", "--permanent", "--add-port="+portStr+"/"+protocol).Run()
-		_ = exec.Command("firewall-cmd", "--reload").Run()
-		return nil
+		if err := exec.Command("firewall-cmd", "--state").Run(); err == nil {
+			firewalldRunning = true
+			_ = exec.Command("firewall-cmd", "--permanent", "--add-port="+portStr+"/"+protocol).Run()
+			_ = exec.Command("firewall-cmd", "--reload").Run()
+		}
 	}
+	// When ufw is installed but inactive (common on VPS), ufw rules do nothing — add iptables INPUT.
 	if _, err := exec.LookPath("iptables"); err == nil {
-		_ = exec.Command("iptables", "-I", "INPUT", "-p", protocol, "--dport", portStr, "-j", "ACCEPT").Run()
-		return nil
-	}
-	if runtime.GOOS == "linux" {
-		fmt.Fprintf(os.Stderr, "[!] No ufw, firewalld, or iptables found; could not open port %d/%s automatically.\n", port, protocol)
+		if !ufwActive && !firewalldRunning {
+			_ = exec.Command("iptables", "-I", "INPUT", "1", "-p", protocol, "--dport", portStr, "-j", "ACCEPT").Run()
+			fmt.Printf("[*] Inbound %s/%s allowed via iptables (ufw/firewalld not active on this host).\n", portStr, protocol)
+		}
+	} else if runtime.GOOS == "linux" && !ufwActive && !firewalldRunning {
+		fmt.Fprintf(os.Stderr, "[!] No iptables: could not add direct INPUT allow for %d/%s (install iptables or enable ufw/firewalld).\n", port, protocol)
 	}
 	return nil
 }
+
 // CloseFirewallPort removes or blocks an inbound firewall rule.
 func CloseFirewallPort(port int, protocol, name string) error {
 	if port <= 0 {
@@ -236,6 +245,55 @@ func ListWindowsUsers() ([]string, error) {
 	return users, nil
 }
 
+// envForPkgManager sets env so apt-get does not stop on debconf prompts (kernel upgrade / package config dialogs).
+func envForPkgManager(bin string) []string {
+	env := os.Environ()
+	if bin == "apt-get" {
+		env = append(env, "DEBIAN_FRONTEND=noninteractive", "APT_LISTCHANGES_FRONTEND=none")
+	}
+	return env
+}
+
+// EnsureWgQuick ensures wg-quick is on PATH (Linux: may run apt/dnf to install wireguard-tools).
+// Required for wg-quick@ systemd units and installWireGuardLinux.
+func EnsureWgQuick() error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	if _, err := exec.LookPath("wg-quick"); err == nil {
+		return nil
+	}
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("wg-quick not found; install WireGuard tools for your OS")
+	}
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("wg-quick not found; install wireguard-tools (e.g. sudo apt install -y wireguard-tools)")
+	}
+	fmt.Printf("[*] Installing wireguard-tools (wg-quick)...\n")
+	for _, pkg := range [][]string{
+		{"apt-get", "install", "-y", "wireguard-tools"},
+		{"apt-get", "install", "-y", "wireguard"},
+		{"dnf", "install", "-y", "wireguard-tools"},
+		{"dnf", "install", "-y", "wireguard"},
+		{"yum", "install", "-y", "wireguard-tools"},
+		{"apk", "add", "--no-cache", "wireguard-tools"},
+		{"pacman", "-Sy", "--noconfirm", "wireguard-tools"},
+	} {
+		if _, err := exec.LookPath(pkg[0]); err != nil {
+			continue
+		}
+		cmd := exec.Command(pkg[0], pkg[1:]...)
+		cmd.Env = envForPkgManager(pkg[0])
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
+		if _, err := exec.LookPath("wg-quick"); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("wg-quick not found after attempting to install wireguard-tools")
+}
+
 // EnsureWireGuard installs if needed and returns wireguard.exe or wg path.
 func EnsureWireGuard() (string, error) {
 	if runtime.GOOS == "windows" {
@@ -288,11 +346,16 @@ func EnsureWireGuard() (string, error) {
 	}
 
 	if p, err := exec.LookPath("wg"); err == nil {
-		return p, nil
+		if _, err := exec.LookPath("wg-quick"); err == nil {
+			return p, nil
+		}
 	}
 	for _, pkg := range [][]string{
+		{"apt-get", "install", "-y", "wireguard-tools"},
 		{"apt-get", "install", "-y", "wireguard"},
+		{"dnf", "install", "-y", "wireguard-tools"},
 		{"dnf", "install", "-y", "wireguard"},
+		{"yum", "install", "-y", "wireguard-tools"},
 		{"yum", "install", "-y", "wireguard"},
 		{"apk", "add", "--no-cache", "wireguard-tools"},
 		{"pacman", "-Sy", "--noconfirm", "wireguard-tools"},
@@ -300,9 +363,15 @@ func EnsureWireGuard() (string, error) {
 		if _, err := exec.LookPath(pkg[0]); err != nil {
 			continue
 		}
-		_ = exec.Command(pkg[0], pkg[1:]...).Run()
+		cmd := exec.Command(pkg[0], pkg[1:]...)
+		cmd.Env = envForPkgManager(pkg[0])
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
 		if p, err := exec.LookPath("wg"); err == nil {
-			return p, nil
+			if _, err := exec.LookPath("wg-quick"); err == nil {
+				return p, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("wireguard not found and auto-install failed")

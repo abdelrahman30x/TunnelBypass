@@ -252,7 +252,7 @@ func uninstallCLIHint(serviceName, dataDir string) string {
 	if strings.TrimSpace(serviceName) == "" {
 		return ""
 	}
-	line := "tunnelbypass uninstall --service " + serviceName + " --yes"
+	line := utils.AppName() + " uninstall --service " + serviceName + " --yes"
 	if q := quoteDataDirForDisplay(dataDir); q != "" {
 		line += " --data-dir " + q
 	}
@@ -284,7 +284,7 @@ func buildSuggestions(c PortConflict, commandHint string, dataDir string) []stri
 		port2 = 8443
 	}
 	if commandHint == "" {
-		commandHint = "tunnelbypass run --type " + c.Transport
+		commandHint = utils.AppName() + " run --type " + c.Transport
 	}
 
 	// Smart Hint #1: Unified Uninstall

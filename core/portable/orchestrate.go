@@ -8,7 +8,6 @@ import (
 	"time"
 
 	tbssh "tunnelbypass/core/ssh"
-	"tunnelbypass/internal/tblog"
 )
 
 func isBindConflict(err error) bool {
@@ -28,10 +27,15 @@ func depPortHint(depName string, o Options) int {
 		}
 		return 7300
 	case "ssh":
-		if o.SSHPort > 0 {
-			return o.SSHPort
+		p := o.SSHPort
+		if p <= 0 {
+			p = tbssh.ListenPreference()
 		}
-		return tbssh.ListenPreference()
+		p = tbssh.SanitizeEmbeddedListenPort(p)
+		if p <= 0 {
+			return 0
+		}
+		return p
 	default:
 		return 0
 	}
@@ -49,7 +53,7 @@ func annotateDependencyError(depName string, o Options, err error) error {
 }
 
 func DepStartTimeout() time.Duration {
-	ms := tblog.IntFromEnv("TB_DEP_START_TIMEOUT_MS", 120000)
+	ms := 120000
 	if ms < 1000 {
 		ms = 1000
 	}
@@ -191,13 +195,12 @@ func waitOneDependency(ctx context.Context, dep string, o Options, log *slog.Log
 		}
 		return nil
 	case "ssh":
-		p := o.SSHPort
-		if p <= 0 {
-			p = tbssh.ListenPreference()
+		addr, err := sshDependencyListenAddr(ctx, o)
+		if err != nil {
+			return err
 		}
-		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		if err := probeTCPWithRetry(ctx, addr, log, "ssh"); err != nil {
-			return fmt.Errorf("ssh not ready on port %d: %w", p, err)
+			return fmt.Errorf("ssh not ready on %s: %w", addr, err)
 		}
 		up := o.UDPGWPort
 		if up <= 0 {

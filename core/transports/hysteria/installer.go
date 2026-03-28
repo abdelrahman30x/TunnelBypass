@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
 	"tunnelbypass/core/installer"
+
+	"gopkg.in/yaml.v3"
 )
 
 // InstallHysteriaService registers hysteria with the TunnelBypass service wrapper.

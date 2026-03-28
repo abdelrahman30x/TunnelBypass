@@ -6,6 +6,7 @@ import (
 
 	"tunnelbypass/core/portable"
 	"tunnelbypass/internal/uicolors"
+	"tunnelbypass/internal/utils"
 )
 
 // FormatPortConflictPretty renders a wizard-style box for port conflicts (non-portable runs).
@@ -24,8 +25,10 @@ func FormatPortConflictPretty(c portable.PortConflict) string {
 		b.WriteString(fmt.Sprintf("\n  %sRecommended:%s stop OS service %s%s%s (step 1), or uninstall (step 2), before retrying.\n",
 			uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, c.OSServiceName, uicolors.ColorReset))
 	} else if c.PID > 0 {
-		b.WriteString(fmt.Sprintf("\n  %sRecommended:%s identify PID %s%d%s; run %stunnelbypass status%s before any force-kill.\n",
-			uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset, uicolors.ColorGreen, c.PID, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset))
+		b.WriteString(fmt.Sprintf("\n  %sRecommended:%s identify PID %s%d%s; run %s%s status%s before any force-kill.\n",
+			uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset,
+			uicolors.ColorGreen, c.PID, uicolors.ColorReset,
+			uicolors.ColorBold+uicolors.ColorCyan, utils.AppName(), uicolors.ColorReset))
 	}
 
 	b.WriteString(fmt.Sprintf("\n  %sDetected%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset))

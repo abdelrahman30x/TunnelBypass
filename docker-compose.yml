@@ -22,13 +22,11 @@ services:
     volumes:
       - tunnelbypass-data:/data
     environment:
-      TB_LOG: json
-      TB_DATA_DIR: /data
-      TB_PORTABLE: "1"
+      TUNNELBYPASS_DATA_DIR: /data
     # Interactive CLI; disable for detached-only usage (tty: false stdin_open: false)
     stdin_open: true
     tty: true
-    # Uncomment and set host:container to match TB_SSH_LISTEN, TB_UDPGW_PORT, --wss-port, etc.
+    # Uncomment and set host:container to match your transport listen ports (--ssh-port, --udpgw-port, --wss-port, etc.)
     # ports:
     #   - "2222:2222"
     #   - "7300:7300"

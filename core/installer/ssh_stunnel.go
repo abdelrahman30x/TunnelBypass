@@ -37,7 +37,16 @@ func EnsureSshStunnelServer(sslPort int, username, password string, updatePasswo
 		}
 	}
 
-	if err := EnsureSSHServerWithAuth(username, password); err != nil {
+	fmt.Printf("\n    [*] Installing embedded SSH as an OS service...\n")
+	StopEmbeddedSSHServer()
+
+	udpgwPort, err := EnsureSSHUDPGW(7300)
+	if err != nil {
+		return fmt.Errorf("UDPGW service: %w", err)
+	}
+
+	// Prepare SSH configuration and install as a service (don't start in-process)
+	if err := InstallEmbedSSHServiceWithPrepare(username, password, true, udpgwPort); err != nil {
 		return err
 	}
 
@@ -60,6 +69,7 @@ func EnsureSshStunnelServer(sslPort int, username, password string, updatePasswo
 
 	serviceName := "TunnelBypass-SSL"
 	args := []string{stunnelConf}
+
 	if err := CreateService(
 		serviceName,
 		serviceName+" (stunnel SSH-SSL)",
@@ -71,8 +81,5 @@ func EnsureSshStunnelServer(sslPort int, username, password string, updatePasswo
 	}
 
 	_ = OpenFirewallPort(sslPort, "tcp", serviceName)
-	if err := EnsureSSHUDPGW(7300); err != nil {
-		fmt.Printf("    [!] Warning: UDPGW setup failed: %v\n", err)
-	}
 	return nil
 }

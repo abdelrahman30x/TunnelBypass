@@ -1,4 +1,4 @@
-// Package layout: data directory paths (portable mode, TB_DATA_DIR, overrides).
+// Package layout: data directory paths and overrides (SetDataRootOverride / CLI).
 package layout
 
 import (
@@ -36,18 +36,15 @@ func SetDataRootOverride(dir string) {
 	dataRootOverride = normalizePathInput(dir)
 }
 
-// Log directory override; empty uses TB_LOGS_DIR or <base>/logs.
+// Log directory override; empty uses <base>/logs.
 func SetLogsRootOverride(dir string) {
 	logsRootOverride = normalizePathInput(dir)
 }
 
-// Log directory: override, TB_LOGS_DIR, or <base>/logs.
+// Log directory: override or <base>/logs.
 func GetLogsDir() string {
 	if logsRootOverride != "" {
 		return logsRootOverride
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_LOGS_DIR")); v != "" {
-		return normalizePathInput(v)
 	}
 	return filepath.Join(GetBaseDir(), "logs")
 }
@@ -75,16 +72,10 @@ func PortableDefaultDataDir() string {
 	return filepath.Join(xdg, "tunnelbypass")
 }
 
-// Install root: TB_DATA_DIR, portable, override, or OS default.
+// Install root: SetDataRootOverride, or OS default (use --data-dir / --portable from CLI).
 func GetBaseDir() string {
 	if dataRootOverride != "" {
 		return dataRootOverride
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_DATA_DIR")); v != "" {
-		return normalizePathInput(v)
-	}
-	if v := strings.TrimSpace(os.Getenv("TB_PORTABLE")); v == "1" || strings.EqualFold(v, "true") {
-		return PortableDefaultDataDir()
 	}
 	if runtime.GOOS == "windows" {
 		drive := os.Getenv("SystemDrive")
@@ -109,11 +100,7 @@ func GetConfigDir(transport string) string {
 	return filepath.Join(dir, t)
 }
 
-// True when override or TB_PORTABLE selects the portable tree.
+// True when a data-root override selects a portable-style tree (explicit path set via API).
 func PortableLayoutActive() bool {
-	if dataRootOverride != "" {
-		return true
-	}
-	v := strings.TrimSpace(os.Getenv("TB_PORTABLE"))
-	return v == "1" || strings.EqualFold(v, "true")
+	return dataRootOverride != ""
 }
