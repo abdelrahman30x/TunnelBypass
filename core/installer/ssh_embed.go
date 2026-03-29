@@ -3,6 +3,7 @@ package installer
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -430,7 +431,7 @@ func InstallEmbedSSHService() error {
 // externalUDPGW adds --external-udpgw (UDPGW provided by TunnelBypass-UDPGW service).
 // udpgwPort is the TCP port UDPGW listens on when externalUDPGW is true (0 = omit flag; engine defaults to 7300).
 func installSSHServiceInternal(internalPort int, username, password string, externalUDPGW bool, udpgwPort int) error {
-	exe, err := os.Executable()
+	exe, err := resolveServiceExe()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
@@ -487,7 +488,7 @@ func InstallSSHForwarderService(externalPort, internalPort int) error {
 	if externalPort <= 0 || internalPort <= 0 {
 		return fmt.Errorf("invalid forwarder ports: external=%d internal=%d", externalPort, internalPort)
 	}
-	exe, err := os.Executable()
+	exe, err := resolveServiceExe()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
@@ -736,9 +737,60 @@ func printSSHServiceManagementHintsLinux() {
 	fmt.Printf("\n")
 }
 
+// resolveServiceExe returns the path the systemd unit should use for ExecStart.
+// If the current binary lives under /root or /home (which ProtectHome=true blocks),
+// copy it to /usr/local/bin so the service can access it.
+func resolveServiceExe() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to get executable path: %w", err)
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve executable symlink: %w", err)
+	}
+
+	// ProtectHome=true hides /root, /home, and /run/user from the service process.
+	// If the binary is under any of those paths, install a copy to /usr/local/bin.
+	protected := []string{"/root/", "/home/", "/run/user/"}
+	needsCopy := false
+	for _, p := range protected {
+		if strings.HasPrefix(exe, p) {
+			needsCopy = true
+			break
+		}
+	}
+
+	if needsCopy {
+		dest := "/usr/local/bin/tunnelbypass"
+		fmt.Printf("    [*] Binary is under a protected path (%s); copying to %s for service use\n", exe, dest)
+		src, err := os.Open(exe)
+		if err != nil {
+			return "", fmt.Errorf("failed to open binary for copy: %w", err)
+		}
+		defer src.Close()
+		tmp := dest + ".tmp"
+		dst, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+		if err != nil {
+			return "", fmt.Errorf("failed to create %s: %w", tmp, err)
+		}
+		if _, err := io.Copy(dst, src); err != nil {
+			dst.Close()
+			os.Remove(tmp)
+			return "", fmt.Errorf("failed to copy binary: %w", err)
+		}
+		dst.Close()
+		if err := os.Rename(tmp, dest); err != nil {
+			return "", fmt.Errorf("failed to move binary to %s: %w", dest, err)
+		}
+		return dest, nil
+	}
+	return exe, nil
+}
+
 // createSSHSystemdUnit creates the systemd unit file directly.
 func createSSHSystemdUnit(internalPort int, username, password string, externalUDPGW bool, udpgwPort int) error {
-	exe, err := os.Executable()
+	exe, err := resolveServiceExe()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}

@@ -124,6 +124,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		Port:           spec.Port,
 		UUID:           strings.TrimSpace(spec.Auth.UUID),
 		Sni:            strings.TrimSpace(spec.SNI),
+		WSPath:         strings.TrimSpace(spec.WSPath),
 		Host:           strings.TrimSpace(spec.Server.Address),
 		SSHUser:        strings.TrimSpace(spec.Auth.SSHUser),
 		SSHPassword:    strings.TrimSpace(spec.Auth.SSHPass),

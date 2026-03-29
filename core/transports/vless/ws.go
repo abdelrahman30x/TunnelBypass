@@ -223,12 +223,12 @@ func GenerateVlessWSClientConfig(opt types.ConfigOptions) (string, error) {
 func GenerateVlessWSURL(opt types.ConfigOptions) string {
 	var endpoint string
 	switch {
+	case opt.ServerAddr != "":
+		endpoint = opt.ServerAddr
 	case opt.Host != "":
 		endpoint = opt.Host
 	case opt.Sni != "":
 		endpoint = opt.Sni
-	case opt.ServerAddr != "":
-		endpoint = opt.ServerAddr
 	default:
 		endpoint = host_catalog.RandomHost()
 	}
@@ -237,10 +237,16 @@ func GenerateVlessWSURL(opt types.ConfigOptions) string {
 		sni = endpoint
 	}
 	wsPath := NormalizeWSPath(opt.WSPath)
-	pathEnc := url.QueryEscape(wsPath)
+
+	// Encode the path for use as a URL query parameter value.
+	// Spaces and most special chars are encoded, but we encode '=' inside
+	// any embedded query string (e.g. ?MOD=AJPERES → ?MOD%3DAJPERES) while
+	// keeping '/' and '?' readable — matching what Xray/v2ray clients expect.
+	pathEnc := strings.ReplaceAll(url.PathEscape(wsPath), "=", "%3D")
+
 	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-VLESS-WS-%s", utils.SanitizeForTag(sni)))
 	return fmt.Sprintf(
-		"vless://%s@%s:%d?encryption=none&security=tls&type=ws&host=%s&sni=%s&path=%s&fp=chrome&allowInsecure=1#%s",
+		"vless://%s@%s:%d?encryption=none&security=tls&sni=%s&allowInsecure=true&fp=chrome&type=ws&host=%s&path=%s&packetEncoding=xudp#%s",
 		opt.UUID, endpoint, opt.Port,
 		url.QueryEscape(sni), url.QueryEscape(sni), pathEnc, tag,
 	)
