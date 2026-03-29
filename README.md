@@ -6,6 +6,14 @@
 
 ---
 
+## 📺 Video Tutorial
+
+[![TunnelBypass Tutorial](https://img.youtube.com/vi/praPwuKj9d4/maxresdefault.jpg)](https://www.youtube.com/watch?v=praPwuKj9d4)
+
+> **Watch:** [شرح برنامج TunnelBypass — إعداد النفق خطوة بخطوة](https://www.youtube.com/watch?v=praPwuKj9d4)
+
+---
+
 ## Quickstart (from source)
 
 **Go 1.25+** — see `go.mod`. From the repository root:
