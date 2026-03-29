@@ -87,6 +87,7 @@ func GenerateClientShareLink(cliPath string) (utils.ShareLink, error) {
 	if err != nil {
 		return utils.ShareLink{}, err
 	}
+	data = utils.StripUTF8BOM(data)
 	return utils.ShareLink{
 		Label: "WireGuard client",
 		URL:   string(data), // best for QR import
@@ -99,6 +100,7 @@ func GenerateClientDataURL(cliPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	data = utils.StripUTF8BOM(data)
 	b64 := base64.StdEncoding.EncodeToString(data)
 	// Strip any accidental whitespace; keep URL compact.
 	b64 = strings.TrimSpace(b64)
@@ -111,6 +113,7 @@ func GenerateClientWireGuardBase64URL(cliPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	data = utils.StripUTF8BOM(data)
 	b64 := base64.StdEncoding.EncodeToString(data)
 	b64 = strings.TrimSpace(b64)
 	return "wireguard://" + b64, nil

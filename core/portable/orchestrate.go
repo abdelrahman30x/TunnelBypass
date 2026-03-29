@@ -101,6 +101,16 @@ func RunOrchestrated(ctx context.Context, log *slog.Logger, target string, o Opt
 
 	for _, depName := range deps {
 		depName = strings.ToLower(strings.TrimSpace(depName))
+
+		// If the dependency is already satisfied (e.g. UDPGW service already running),
+		// skip starting it to avoid a bind conflict on Windows.
+		if waitOneDependency(context.Background(), depName, o, log) == nil {
+			if log != nil {
+				log.Info("dependency already running, skipping start", "dep", depName)
+			}
+			continue
+		}
+
 		dctx, cancel := context.WithCancel(ctx)
 		depCancels = append(depCancels, cancel)
 

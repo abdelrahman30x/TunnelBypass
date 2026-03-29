@@ -11,4 +11,7 @@ const (
 	ColorCyan    = "\033[38;5;159m"
 	ColorMagenta = "\033[38;5;213m"
 	ColorGray    = "\033[38;5;246m"
+	ColorWhite   = "\033[38;5;255m"
+	ColorOrange  = "\033[38;5;214m"
+	ColorTeal    = "\033[38;5;87m"
 )

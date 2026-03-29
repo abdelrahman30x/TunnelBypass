@@ -5,6 +5,7 @@
 *.dylib
 
 # Build artifacts
+/build/
 /bin/
 tunnelbypass.exe
 tunnelbypass

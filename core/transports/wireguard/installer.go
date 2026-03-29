@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
 	"tunnelbypass/core/installer"
+	"tunnelbypass/internal/utils"
 )
 
 func findWireGuardExe() (string, error) {
@@ -170,8 +173,10 @@ func readLinuxWGState() linuxWGState {
 	if err != nil {
 		return linuxWGState{}
 	}
+	data = utils.StripUTF8BOM(data)
 	var s linuxWGState
-	if json.Unmarshal(data, &s) != nil {
+	if err := json.Unmarshal(data, &s); err != nil {
+		slog.Default().Warn("wireguard: ignoring corrupt linux state file", "path", linuxWGStatePath(), "err", err)
 		return linuxWGState{}
 	}
 	return s

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"tunnelbypass/internal/runtimeenv"
+	"tunnelbypass/internal/utils"
 )
 
 // userSupervisorManifest is persisted so Start can respawn after wizard exits.
@@ -49,6 +50,7 @@ func (m *userSupervisorManager) readManifest(name string) (userSupervisorManifes
 	if err != nil {
 		return man, err
 	}
+	b = utils.StripUTF8BOM(b)
 	err = json.Unmarshal(b, &man)
 	return man, err
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"tunnelbypass/internal/utils"
 )
 
 // PortConfig holds the SSH port configuration.
@@ -42,7 +44,8 @@ func LoadPortConfig(configDir string) (PortConfig, error) {
 		}
 		return cfg, fmt.Errorf("failed to read port config: %w", err)
 	}
-	
+	data = utils.StripUTF8BOM(data)
+
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("failed to parse port config: %w", err)
 	}

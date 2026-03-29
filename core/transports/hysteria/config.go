@@ -239,6 +239,7 @@ func ReadServerNamesFromServerConfig(configPath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	data = utils.StripUTF8BOM(data)
 	var root map[string]interface{}
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, err
@@ -288,6 +289,7 @@ func AppendServerName(configPath, newSni string) (added bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	data = utils.StripUTF8BOM(data)
 	var root map[string]interface{}
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return false, err

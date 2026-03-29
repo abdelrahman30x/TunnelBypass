@@ -20,12 +20,15 @@ import (
 
 func runToolsMenu(reader *bufio.Reader) {
 	for {
-		fmt.Printf("\n%s═══ DIAGNOSTIC TOOLS ═══%s\n", ColorBold+ColorBlue, ColorReset)
-		fmt.Printf("  %s1)%s %sManage tunnel host catalog%s\n", ColorCyan, ColorReset, ColorGreen, ColorReset)
-		fmt.Printf("  %s2)%s %sCompletely Remove / Uninstall Service%s\n", ColorCyan, ColorReset, ColorRed, ColorReset)
-		fmt.Printf("  %sb)%s %sBack to Main Menu%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ║%s         %s✦  DIAGNOSTIC TOOLS  ✦%s          %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("  %s[1]%s  %sManage Tunnel Host Catalog%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[2]%s  %sCompletely Remove / Uninstall Service%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
+		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
+		fmt.Printf("  %s[B]%s  %sBack to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 
-		choice := prompt(reader, fmt.Sprintf("\n%sSelect Tool: %s", ColorBold, ColorReset))
+		choice := prompt(reader, fmt.Sprintf("\n%sSelect Tool: %s", ColorBold+ColorYellow, ColorReset))
 
 		switch strings.ToLower(choice) {
 		case "1":
@@ -42,11 +45,14 @@ func runToolsMenu(reader *bufio.Reader) {
 
 func runHostCatalogMenu(reader *bufio.Reader) {
 	for {
-		fmt.Printf("\n%s═══ HOST CATALOG ═══%s\n", ColorBold+ColorYellow, ColorReset)
+		fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ║%s           %s✦  HOST CATALOG  ✦%s            %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n", ColorTeal+ColorBold, ColorReset)
 		runHosts()
-		fmt.Printf("%s1)%s %sAdd host%s\n", ColorCyan, ColorReset, ColorGreen, ColorReset)
-		fmt.Printf("%s2)%s %sRemove host%s %s(by row number or hostname)%s\n", ColorCyan, ColorReset, ColorRed, ColorReset, ColorGray, ColorReset)
-		fmt.Printf("%sb)%s %sBack%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[1]%s  %sAdd Host%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[2]%s  %sRemove Host%s  %s(by row number or hostname)%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
+		fmt.Printf("  %s[B]%s  %sBack%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 
 		choice := strings.ToLower(prompt(reader, fmt.Sprintf("\n%sChoice: %s", ColorBold+ColorYellow, ColorReset)))
 		switch choice {
@@ -93,8 +99,10 @@ func runHostCatalogMenu(reader *bufio.Reader) {
 
 func runHelpMenu(reader *bufio.Reader) {
 	base := installer.GetBaseDir()
-	fmt.Printf("\n%s═══ USAGE GUIDE ═══%s\n", ColorBold+ColorCyan, ColorReset)
-	fmt.Printf("%sWelcome to TunnelBypass!%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("%s  ║%s            %s✦  USAGE GUIDE  ✦%s            %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n", ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("\n  %sWelcome to TunnelBypass!%s\n", ColorBold+ColorGreen, ColorReset)
 
 	fmt.Printf("\n%s1) Setup tunnel%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Printf("   %s- Main Menu -> 1%s %s(Setup/Reinstall Tunnel)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
@@ -123,13 +131,16 @@ func runHelpMenu(reader *bufio.Reader) {
 
 func runManageServiceMenu(reader *bufio.Reader) {
 	for {
-		fmt.Printf("\n%s═══ MANAGE TUNNEL ═══%s\n", ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %s1)%s %sShow sharing links%s\n", ColorCyan, ColorReset, ColorGreen, ColorReset)
-		fmt.Printf("  %s2)%s %sAdd tunnel hostname (SNI)%s\n", ColorCyan, ColorReset, ColorGreen, ColorReset)
-		fmt.Printf("  %s3)%s %sStop Service%s\n", ColorCyan, ColorReset, ColorYellow, ColorReset)
-		fmt.Printf("  %s4)%s %sStart Service%s\n", ColorCyan, ColorReset, ColorGreen, ColorReset)
-		fmt.Printf("  %s5)%s %sCompletely Uninstall Service%s\n", ColorCyan, ColorReset, ColorRed, ColorReset)
-		fmt.Printf("  %sb)%s %sBack to Diagnostic Tools%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ║%s           %s✦  MANAGE TUNNEL  ✦%s           %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("  %s[1]%s  %sShow Sharing Links%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[2]%s  %sAdd Tunnel Hostname (SNI)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		fmt.Printf("  %s[4]%s  %sStart Service%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[5]%s  %sCompletely Uninstall Service%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
+		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
+		fmt.Printf("  %s[B]%s  %sBack to Diagnostic Tools%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 
 		choice := prompt(reader, fmt.Sprintf("\n%sSelect Option: %s", ColorBold+ColorYellow, ColorReset))
 
@@ -225,11 +236,11 @@ func showUDPGWInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		fmt.Printf("%s════════════════════════════════════════════════════════════%s\n", ColorBold+ColorCyan, ColorReset)
 		fmt.Printf("    %sType:%s %sUDP gateway (SSH / WSS / TLS companion)%s\n", ColorGray, ColorReset, ColorBold+ColorCyan, ColorReset)
 		fmt.Printf("\n  %s▸ %sCHOOSE AN ACTION%s\n", ColorGray, ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %s1)%s  %sShow Status & Logs%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorGreen, ColorReset)
-		fmt.Printf("  %s3)%s  %sStop Service%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %s6)%s  %sUninstall UDPGW Service%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorRed, ColorReset)
-		fmt.Printf("  %sq)%s  %sExit to Main Menu%s\n", ColorBold+ColorCyan, ColorReset, ColorGray, ColorReset)
-		fmt.Printf("  %sx)%s  %sExit Application%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorRed, ColorReset)
+		fmt.Printf("  %s[1]%s  %sShow Status & Logs%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		fmt.Printf("  %s[6]%s  %sUninstall UDPGW Service%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
+		fmt.Printf("  %s[Q]%s  %sExit to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[X]%s  %sExit Application%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
 		choice := strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice:%s ", ColorBold+ColorYellow, ColorReset)))
 		switch choice {
 		case "1":
@@ -273,25 +284,25 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		fmt.Printf("%s════════════════════════════════════════════════════════════%s\n", ColorBold+ColorCyan, ColorReset)
 		fmt.Printf("    %sType:%s %s%s%s\n", ColorGray, ColorReset, ColorBold+ColorCyan, tr, ColorReset)
 		fmt.Printf("\n  %s▸ %sCHOOSE AN ACTION%s\n", ColorGray, ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %s1)%s  %sShow Status & Logs%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorGreen, ColorReset)
-		fmt.Printf("  %s2)%s  %sRestart Service%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %s3)%s  %sStop Service%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorYellow, ColorReset)
+		fmt.Printf("  %s[1]%s  %sShow Status & Logs%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[2]%s  %sRestart Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
 
 		switch tr {
 		case transportXray, transportHysteria:
-			fmt.Printf("  %s4)%s  %sAdd tunnel hostname (SNI)%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorGreen, ColorReset)
-			fmt.Printf("  %s5)%s  %sShow sharing links%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorMagenta, ColorReset)
+			fmt.Printf("  %s[4]%s  %sAdd tunnel hostname (SNI)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+			fmt.Printf("  %s[5]%s  %sShow sharing links%s\n", ColorBold+ColorWhite, ColorReset, ColorMagenta, ColorReset)
 		case transportWireGuard:
-			fmt.Printf("  %s4)%s  %sShow client config / QR%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorGreen, ColorReset)
+			fmt.Printf("  %s[4]%s  %sShow client config / QR%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		case transportSSH, transportSSL, transportWSS:
-			fmt.Printf("  %s4)%s  %sShow instructions%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorGreen, ColorReset)
+			fmt.Printf("  %s[4]%s  %sShow instructions%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		default:
 		}
 
-		fmt.Printf("  %s6)%s  %sUninstall Service & Remove Files%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorRed, ColorReset)
-		fmt.Printf("  %s7)%s  %sReinstall (Fresh Setup)%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("  %sq)%s  %sExit to Main Menu%s\n", ColorBold+ColorCyan, ColorReset, ColorGray, ColorReset)
-		fmt.Printf("  %sx)%s  %sExit Application%s\n", ColorBold+ColorCyan, ColorReset, ColorBold+ColorRed, ColorReset)
+		fmt.Printf("  %s[6]%s  %sUninstall Service & Remove Files%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
+		fmt.Printf("  %s[7]%s  %sReinstall (Fresh Setup)%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		fmt.Printf("  %s[Q]%s  %sExit to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[X]%s  %sExit Application%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
 
 		choice := strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice:%s ", ColorBold+ColorYellow, ColorReset)))
 
@@ -423,7 +434,10 @@ func showServiceStatus(name string) {
 	}
 	fmt.Printf("\n    %sNote:%s Open these files to view logs (not printed in CMD).\n", ColorGray, ColorReset)
 	if runtime.GOOS == "linux" {
-		fmt.Printf("    %sLinux Systemd:%s View logs using `journalctl -f -u %s`\n", ColorYellow, ColorReset, name)
+		fmt.Printf("    %sLinux systemd:%s View logs using `journalctl -f -u %s`\n", ColorYellow, ColorReset, name)
+	}
+	if runtime.GOOS == "darwin" {
+		fmt.Printf("    %smacOS:%s Use Console.app or `log show --last 1h --style syslog` for system logs; TunnelBypass lines are in the files above.\n", ColorYellow, ColorReset)
 	}
 }
 

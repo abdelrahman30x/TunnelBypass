@@ -37,6 +37,12 @@ func RestartSSHD() error {
 	if runtime.GOOS == "windows" {
 		return exec.Command("powershell", "-Command", "Restart-Service sshd -ErrorAction SilentlyContinue").Run()
 	}
+	if runtime.GOOS == "darwin" {
+		// macOS has no systemd; reload OpenSSH if running (HUP) or kick the system service.
+		_ = exec.Command("killall", "-HUP", "sshd").Run()
+		_ = exec.Command("launchctl", "kickstart", "-k", "system/com.openssh.sshd").Run()
+		return nil
+	}
 	_ = exec.Command("systemctl", "restart", "ssh").Run()
 	return exec.Command("systemctl", "restart", "sshd").Run()
 }
@@ -150,7 +156,7 @@ func EnsureSSHUserOnly(username string) {
 		lines = append(lines, "")
 		lines = append(lines, block...)
 	}
-	_ = os.WriteFile(configPath, []byte(strings.Join(lines, "\r\n")), 0644)
+	_ = os.WriteFile(configPath, []byte(strings.Join(lines, sshdConfigNewlines())), 0644)
 	_ = RestartSSHD()
 }
 
@@ -200,6 +206,14 @@ func ManageSSHAllowUsers(username string, add bool) {
 		}
 		lines = append(lines, newAllowLine)
 	}
-	_ = os.WriteFile(configPath, []byte(strings.Join(lines, "\r\n")), 0644)
+	_ = os.WriteFile(configPath, []byte(strings.Join(lines, sshdConfigNewlines())), 0644)
 	_ = RestartSSHD()
+}
+
+// sshdConfigNewlines: OpenSSH expects LF on Unix; Windows configs often use CRLF for local editors.
+func sshdConfigNewlines() string {
+	if runtime.GOOS == "windows" {
+		return "\r\n"
+	}
+	return "\n"
 }

@@ -44,7 +44,7 @@ func executeRun(rawArgs []string) int {
 		fs.PrintDefaults()
 	}
 
-	portableF := fs.Bool("portable", false, "Per-user data directory (LocalAppData / XDG); same as placing the word portable in args")
+	portableF := fs.Bool("portable", false, "Per-user data directory (Windows: LocalAppData; macOS: Application Support; Linux: XDG); same as placing the word portable in args")
 	systemData := fs.Bool("system-data", false, "Keep system-wide data directory (default for run; explicit no-op unless combined with --portable)")
 	dataDir := fs.String("data-dir", "", "Data root for configs, binaries, logs, and run/")
 	daemon := fs.Bool("daemon", false, "Restart transport on exit until interrupted")

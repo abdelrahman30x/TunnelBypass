@@ -42,7 +42,7 @@ REMOTE_USER="root"
 REMOTE_PASS=""
 SSH_KEY=""
 VERSION=""
-RELEASE_DIR="$PROJECT_DIR"
+RELEASE_DIR=""
 DRY_RUN=false
 SKIP_RESTART=false
 TIMEOUT=30
@@ -86,7 +86,7 @@ Authentication (one required):
 Optional:
   -P, --port PORT         SSH port (default: 22)
   -v, --version VERSION   Specific version to deploy (auto-detected if not set)
-  -r, --release-dir DIR   Directory containing release files (default: project root)
+  -r, --release-dir DIR   Directory containing release files (default: PROJECT_DIR/build/<version>)
   -n, --dry-run           Show what would happen without executing
   -s, --skip-restart      Don't restart services after deployment
   -t, --timeout SEC       SSH timeout in seconds (default: 30)
@@ -180,38 +180,49 @@ parse_args() {
     fi
 }
 
-# Detect latest version from release directory
+# Detect latest version (release artifacts live under build/<version>/ per build-release.sh / build-release.ps1)
 detect_latest_version() {
     log_step "Detecting latest version..."
 
     if [[ -n "$VERSION" ]]; then
         log_info "Using specified version: $VERSION"
-        return 0
+    else
+        local latest_version=""
+
+        if [[ -f "$PROJECT_DIR/VERSION" ]]; then
+            latest_version=$(tr -d '[:space:]' < "$PROJECT_DIR/VERSION")
+        fi
+
+        if [[ -z "$latest_version" && -d "$PROJECT_DIR/build" ]]; then
+            local newest="" best=0 m f d
+            for d in "$PROJECT_DIR/build"/*/; do
+                [[ -d "$d" ]] || continue
+                for f in "$d"tunnelbypass_*_linux_amd64.tar.gz; do
+                    [[ -f "$f" ]] || continue
+                    m=0
+                    if m=$(stat -f %m "$f" 2>/dev/null); then :; elif m=$(stat -c %Y "$f" 2>/dev/null); then :; else m=0; fi
+                    if (( m > best )); then best=$m; newest=$f; fi
+                done
+            done
+            if [[ -n "$newest" ]]; then
+                latest_version=$(basename "$newest" | sed -E 's/tunnelbypass_([^_]+)_linux_amd64.tar.gz/\1/')
+            fi
+        fi
+
+        if [[ -z "$latest_version" ]]; then
+            log_error "Could not detect version. Please specify with -v"
+            log_info "Expected artifacts under: $PROJECT_DIR/build/<version>/ (from build-release) or VERSION at repo root"
+            exit 1
+        fi
+
+        VERSION="$latest_version"
+        log_success "Detected version: $VERSION"
     fi
 
-    # Look for version files or parse from filenames
-    local latest_version=""
-
-    # Check VERSION file
-    if [[ -f "$RELEASE_DIR/VERSION" ]]; then
-        latest_version=$(cat "$RELEASE_DIR/VERSION" | tr -d '[:space:]')
+    if [[ -z "$RELEASE_DIR" ]]; then
+        RELEASE_DIR="$PROJECT_DIR/build/$VERSION"
+        log_info "Release directory (default): $RELEASE_DIR"
     fi
-
-    # If no VERSION file, parse from release filenames
-    if [[ -z "$latest_version" ]]; then
-        latest_version=$(ls -1 "$RELEASE_DIR"/tunnelbypass_*_linux_amd64.tar.gz 2>/dev/null | \
-            head -1 | \
-            sed -E 's/.*tunnelbypass_([^_]+)_linux_amd64.tar.gz/\1/')
-    fi
-
-    if [[ -z "$latest_version" ]]; then
-        log_error "Could not detect version. Please specify with -v"
-        log_info "Looking for files matching: $RELEASE_DIR/tunnelbypass_*_linux_amd64.tar.gz"
-        exit 1
-    fi
-
-    VERSION="$latest_version"
-    log_success "Detected version: $VERSION"
 }
 
 # Detect remote OS and architecture
@@ -362,7 +373,7 @@ install_remote() {
     log_step "Installing on remote server..."
 
     if [[ "$DRY_RUN" == true ]]; then
-        log_warn "[DRY-RUN] Would install binary and restart services"
+        log_warn "[DRY-RUN] Would stop TunnelBypass services, replace binary, restart later"
         return 0
     fi
 
@@ -376,20 +387,26 @@ install_remote() {
     local dest_dir="/root/tunnelbypass"
     local filename=$(basename "$RELEASE_FILE")
 
-    # Build install commands
-    local install_cmds="cd $dest_dir"
+    local stop_units='for u in TunnelBypass-SSH-Forwarder TunnelBypass-SSH TunnelBypass-WSS TunnelBypass-SSL TunnelBypass-VLESS-WS TunnelBypass-VLESS TunnelBypass-Hysteria TunnelBypass-WireGuard TunnelBypass-Tunnel TunnelBypass-UDP TunnelBypass-UDPGW; do systemctl stop "$u" 2>/dev/null || true; done'
 
-    # Extract if tarball
+    local install_cmds=""
+    if [[ "$REMOTE_OS" == "linux" ]]; then
+        log_info "Stopping TunnelBypass services (if any) before replacing binary..."
+        install_cmds="$stop_units && sleep 1"
+    fi
+
+    install_cmds="$install_cmds && cd $dest_dir && rm -f tunnelbypass"
+
     if [[ "$filename" == *.tar.gz ]]; then
         install_cmds="$install_cmds && tar -xzf $filename"
     fi
 
-    # Set permissions and move to system path
     install_cmds="$install_cmds && chmod +x tunnelbypass"
-    install_cmds="$install_cmds && mv -f tunnelbypass /usr/local/bin/tunnelbypass"
+    install_cmds="$install_cmds && install -m 0755 tunnelbypass /usr/local/bin/tunnelbypass"
+    install_cmds="$install_cmds && tunnelbypass -version"
 
-    # Verify installation
-    install_cmds="$install_cmds && tunnelbypass version"
+    # Trim leading " && " if no stop block (non-linux)
+    install_cmds="${install_cmds# && }"
 
     log_info "Running installation commands..."
     eval "$ssh_cmd '$install_cmds'"
@@ -425,9 +442,17 @@ restart_services() {
 
     # Restart services (ignore errors if services don't exist)
     local restart_cmds="systemctl daemon-reload"
-    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-SSH 2>/dev/null || true"
-    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-WSS 2>/dev/null || true"
     restart_cmds="$restart_cmds && systemctl restart TunnelBypass-UDPGW 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-SSH 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-SSH-Forwarder 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-SSL 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-WSS 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-VLESS-WS 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-VLESS 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-Hysteria 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-WireGuard 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-Tunnel 2>/dev/null || true"
+    restart_cmds="$restart_cmds && systemctl restart TunnelBypass-UDP 2>/dev/null || true"
 
     log_info "Restarting TunnelBypass services..."
     eval "$ssh_cmd '$restart_cmds'" || {
@@ -455,7 +480,7 @@ validate_installation() {
 
     log_info "Checking tunnelbypass version..."
     local version_output
-    version_output=$(eval "$ssh_cmd 'tunnelbypass version 2>&1 || echo \"VERSION_CHECK_FAILED\"'")
+    version_output=$(eval "$ssh_cmd 'tunnelbypass -version 2>&1 || echo \"VERSION_CHECK_FAILED\"'")
 
     if [[ "$version_output" == *"VERSION_CHECK_FAILED"* ]]; then
         log_error "Installation validation failed"

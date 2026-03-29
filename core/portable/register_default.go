@@ -17,6 +17,7 @@ func init() {
 	Register("ssh", func() Transport { return sshTransport{} })
 	Register("udpgw", func() Transport { return udpgwTransport{} })
 	Register("vless", func() Transport { return vlessTransport{} })
+	Register("vless-ws", func() Transport { return vlesswsTransport{} })
 	Register("reality", func() Transport { return realityTransport{} })
 	Register("hysteria", func() Transport { return hysteriaTransport{} })
 	Register("wireguard", func() Transport { return wireguardTransport{} })
@@ -68,6 +69,25 @@ func (vlessTransport) Run(ctx context.Context, log *slog.Logger, o Options) erro
 		return err
 	}
 	_ = WriteRunMeta(installer.GetBaseDir(), "vless", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
+}
+
+type vlesswsTransport struct{}
+
+func (vlesswsTransport) Name() string { return "vless-ws" }
+
+func (vlesswsTransport) Dependencies() []string { return nil }
+
+func (vlesswsTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("vless-ws", "server.json", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("vless-ws: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("xray")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "vless-ws", RunMeta{Extra: map[string]any{"config": cfg}})
 	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
 }
 

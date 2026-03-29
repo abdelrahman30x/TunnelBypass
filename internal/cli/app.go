@@ -25,7 +25,7 @@ import (
 	"tunnelbypass/tools/host_catalog"
 )
 
-var version = "v1.2.1"
+var version = "v1.3.0"
 
 // SetVersion sets the user-visible release string before Main (from cmd, or tests).
 func SetVersion(v string) {
@@ -54,6 +54,7 @@ var (
 
 // Main is the tunnelbypass CLI entry (called from cmd).
 func Main() {
+	terminal.EnableUTF8Console()
 	terminal.EnableVTProcessing()
 	tblog.Init()
 	if v := strings.TrimSpace(os.Getenv("TUNNELBYPASS_DATA_DIR")); v != "" {

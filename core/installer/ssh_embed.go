@@ -178,6 +178,20 @@ func EnsureSSHServerWithAuth(username, password string) error {
 	// If port 22 is busy, we assume it's the system SSH.
 	// To avoid lockout or conflict, we MUST use the embedded server on a different port.
 	if PortListening(22) {
+		// If the saved internal SSH port is already listening (e.g. a service started it in a
+		// separate process), adopt that existing instance.  Attempting to bind the same port from
+		// this process would fail, falsely report success, and cause a password mismatch.
+		if savedCfg, err := LoadSSHPortConfig(); err == nil &&
+			savedCfg.InternalPort > 0 && PortListening(savedCfg.InternalPort) {
+			setEmbedBackend(savedCfg.InternalPort)
+			setExternalPort(savedCfg.ExternalPort)
+			embedMu.Lock()
+			embedRunning = true
+			embedMu.Unlock()
+			fmt.Printf("    [*] Embedded SSH already listening on port %d — adopting existing instance\n",
+				savedCfg.InternalPort)
+			return nil
+		}
 		return startEmbeddedSSHServer(username, password)
 	}
 
@@ -240,6 +254,13 @@ func prepareEmbeddedSSHServer(username, password string) (internalPort int, exte
 	pw := password
 	if pw == "" {
 		pw = readOrCreateEmbedPassword()
+	} else {
+		// Persist the provided password so subsequent wizard runs and service
+		// installs can read the same value from embed_password.txt instead of
+		// generating a fresh UUID that would not match the running service.
+		passPath := filepath.Join(GetConfigDir("ssh"), "embed_password.txt")
+		_ = os.MkdirAll(filepath.Dir(passPath), 0755)
+		_ = os.WriteFile(passPath, []byte(pw), 0600)
 	}
 
 	keyDir := GetConfigDir("ssh")
@@ -284,12 +305,32 @@ func startEmbeddedSSHServer(username, password string) error {
 
 	// Create cancellable context so we can stop the server later
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
+	// Capture early bind failures from the goroutine so we can distinguish
+	// "port in use by another process" from "not ready yet".
+	bindErrCh := make(chan error, 1)
 	go func() {
-		_ = tbssh.Run(ctx, cfg)
+		err := tbssh.Run(ctx, cfg)
+		if err != nil && ctx.Err() == nil {
+			select {
+			case bindErrCh <- err:
+			default:
+			}
+		}
 	}()
 
+	// Give the goroutine a moment to attempt the bind before we start polling.
+	time.Sleep(80 * time.Millisecond)
+
 	for i := 0; i < 100; i++ {
+		// If the goroutine already returned an error, the port is not ours.
+		select {
+		case bindErr := <-bindErrCh:
+			cancel()
+			return fmt.Errorf("embedded SSH failed to bind port %d: %w", internalPort, bindErr)
+		default:
+		}
+
 		if PortListening(internalPort) {
 			setEmbedBackend(internalPort)
 			setExternalPort(externalPort)
@@ -316,26 +357,37 @@ func startEmbeddedSSHServer(username, password string) error {
 // This should be called before installing the standalone systemd service.
 func StopEmbeddedSSHServer() {
 	embedMu.Lock()
-	defer embedMu.Unlock()
-	
 	if !embedRunning {
+		embedMu.Unlock()
 		return
 	}
-	
+
+	port := GetSSHBackendPort()
+
 	fmt.Printf("    [*] Stopping embedded SSH server to release port for systemd service...\n")
-	
-	// Cancel the context to stop the SSH server
+
 	if embedCancel != nil {
 		embedCancel()
 		embedCancel = nil
 	}
-	
-	// Reset state
 	embedRunning = false
-	
-	// Give the OS time to release the socket
+	embedMu.Unlock()
+
 	time.Sleep(500 * time.Millisecond)
-	
+
+	// Windows: the loopback listener can linger briefly; the replacement service must bind the same port.
+	// Wait until nothing accepts on the port, then add a short cooldown (TIME_WAIT / SCM startup).
+	if runtime.GOOS == "windows" && port > 0 {
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if !PortListening(port) {
+				break
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+		time.Sleep(2 * time.Second)
+	}
+
 	fmt.Printf("    [*] Embedded SSH server stopped, port released\n")
 }
 
@@ -412,8 +464,12 @@ func installSSHServiceInternal(internalPort int, username, password string, exte
 
 	fmt.Printf("    [*] Embedded SSH has been installed as a background OS service.\n")
 
-	// Give the service a moment to start
-	time.Sleep(1 * time.Second)
+	// Windows (WinSCM/WinSW): child may need extra time before loopback accepts connections.
+	if runtime.GOOS == "windows" {
+		time.Sleep(3 * time.Second)
+	} else {
+		time.Sleep(1 * time.Second)
+	}
 
 	// Verify the service is running
 	if !serviceRunning("TunnelBypass-SSH") {
@@ -472,13 +528,15 @@ func InstallSSHForwarderService(externalPort, internalPort int) error {
 }
 
 func serviceRunning(name string) bool {
-	if runtime.GOOS != "linux" {
-		return true // Assume running on non-Linux
+	if runtime.GOOS == "linux" {
+		return exec.Command("systemctl", "is-active", "--quiet", name).Run() == nil
 	}
-	cmd := exec.Command("systemctl", "is-active", "--quiet", name)
-	err := cmd.Run()
-	if err != nil {
-		return false
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("sc", "query", name).CombinedOutput()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(strings.ToUpper(string(out)), "RUNNING")
 	}
 	return true
 }
@@ -542,7 +600,11 @@ func installSSHServiceAsStandaloneGeneric(username, password string, installForw
 	if err := installSSHServiceInternal(cfg.InternalPort, u, pw, externalUDPGW, udpgwPort); err != nil {
 		return err
 	}
-	if err := verifyEmbeddedSSHListening(cfg.InternalPort, 45*time.Second); err != nil {
+	verifyTimeout := 45 * time.Second
+	if runtime.GOOS == "windows" {
+		verifyTimeout = 120 * time.Second
+	}
+	if err := verifyEmbeddedSSHListening(cfg.InternalPort, verifyTimeout); err != nil {
 		return fmt.Errorf("SSH service failed to listen: %w", err)
 	}
 
@@ -626,12 +688,16 @@ func verifyEmbeddedSSHListening(port int, timeout time.Duration) error {
 	if port <= 0 {
 		return fmt.Errorf("invalid SSH internal port: %d", port)
 	}
+	poll := 300 * time.Millisecond
+	if runtime.GOOS == "windows" {
+		poll = 500 * time.Millisecond
+	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if PortListening(port) {
 			return nil
 		}
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(poll)
 	}
 	return fmt.Errorf("timeout waiting for port %d to listen", port)
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/internal/utils"
 )
 
 // TLS/SNI catalog from embedded hosts.json.
@@ -139,6 +140,7 @@ func loadHosts() ([]string, error) {
 		}
 		return nil, err
 	}
+	data = utils.StripUTF8BOM(data)
 	var f catalogFile
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, err

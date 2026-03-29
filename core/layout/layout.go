@@ -54,7 +54,7 @@ func DataRootOverride() string {
 	return dataRootOverride
 }
 
-// Default user data directory when portable mode is active.
+// Default user data directory when portable mode is active (Windows: LocalAppData; macOS: ~/Library/Application Support; Linux: XDG or ~/.local/share).
 func PortableDefaultDataDir() string {
 	if runtime.GOOS == "windows" {
 		local := os.Getenv("LOCALAPPDATA")
@@ -63,6 +63,13 @@ func PortableDefaultDataDir() string {
 			local = filepath.Join(home, "AppData", "Local")
 		}
 		return filepath.Join(local, "TunnelBypass")
+	}
+	if runtime.GOOS == "darwin" {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return filepath.Join(".", "TunnelBypass")
+		}
+		return filepath.Join(home, "Library", "Application Support", "TunnelBypass")
 	}
 	xdg := os.Getenv("XDG_DATA_HOME")
 	if xdg == "" {

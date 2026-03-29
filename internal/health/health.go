@@ -14,6 +14,7 @@ import (
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/svcman"
+	"tunnelbypass/internal/utils"
 )
 
 func Report(w io.Writer) {
@@ -31,6 +32,7 @@ func Report(w io.Writer) {
 	names := []string{
 		"TunnelBypass-UDPGW",
 		"TunnelBypass-WSS",
+		"TunnelBypass-VLESS-WS",
 		"TunnelBypass-SSL",
 	}
 	for _, n := range names {
@@ -64,6 +66,7 @@ func Report(w io.Writer) {
 					_, _ = fmt.Fprintf(w, "  %s: read_error: %v\n", n, err)
 					continue
 				}
+				b = utils.StripUTF8BOM(b)
 				var m struct {
 					Transport string         `json:"transport"`
 					Ports     map[string]int `json:"ports"`

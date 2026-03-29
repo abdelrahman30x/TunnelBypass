@@ -24,6 +24,15 @@ func ensureOpenSSHServerInstall() error {
 	}
 
 	if runtime.GOOS != "windows" {
+		if runtime.GOOS == "darwin" {
+			if brew, err := exec.LookPath("brew"); err == nil && brew != "" {
+				_ = exec.Command(brew, "install", "openssh").Run()
+				if PortListening(22) {
+					return nil
+				}
+			}
+			return fmt.Errorf("sshd not found and auto-install failed")
+		}
 		for _, pkg := range [][]string{
 			{"apt-get", "install", "-y", "openssh-server"},
 			{"yum", "install", "-y", "openssh-server"},
@@ -96,9 +105,14 @@ func PortListening(port int) bool {
 	if port <= 0 || port > 65535 {
 		return false
 	}
+	dialWait := 200 * time.Millisecond
+	if runtime.GOOS == "windows" {
+		// Service-hosted listeners (Session 0) can answer loopback dials slightly slower than on Linux.
+		dialWait = 800 * time.Millisecond
+	}
 	s := strconv.Itoa(port)
 	for _, host := range []string{"127.0.0.1", "::1"} {
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, s), 200*time.Millisecond)
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, s), dialWait)
 		if err == nil {
 			_ = conn.Close()
 			return true

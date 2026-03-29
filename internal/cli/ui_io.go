@@ -16,7 +16,14 @@ func printLogo() {
    |_| \__,_|_| |_|_| |_|\___|_|____/ \__, | .__/ \__,_|___/___/   
                                       |___/|_|                     `
 	fmt.Println(logo)
-	fmt.Printf("              %sTunnelBypass CLI - %s%s\n", ColorBold+ColorGray, version, ColorReset)
+	fmt.Printf("%s", ColorReset)
+	const bar = "  ========================================================"
+	fmt.Printf("%s%s%s\n", ColorTeal+ColorBold, bar, ColorReset)
+	fmt.Printf("   %sTunnelBypass CLI%s  -  %s%s%s  -  %sDPI Bypass Tool%s\n",
+		ColorBold+ColorWhite, ColorReset,
+		ColorBold+ColorOrange, version, ColorReset,
+		ColorGray, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorTeal+ColorBold, bar, ColorReset)
 }
 
 func prompt(r *bufio.Reader, label string) string {

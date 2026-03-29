@@ -11,6 +11,9 @@ func init() {
 	transport.RegisterProvision("reality", []string{"vless"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
 		return provisionReality(log, opt, so, co)
 	})
+	transport.RegisterProvision("vless-ws", []string{"vlessws", "xray-wss", "xraywss"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionVlessWS(log, opt, so, co)
+	})
 	transport.RegisterProvision("hysteria", nil, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
 		return provisionHysteria(log, opt, so, co)
 	})

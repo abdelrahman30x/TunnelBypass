@@ -8,6 +8,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
+	"tunnelbypass/internal/utils"
 )
 
 // File is the on-disk JSON shape (all fields optional).
@@ -35,6 +36,7 @@ func Load(path string) (File, error) {
 		}
 		return f, err
 	}
+	b = utils.StripUTF8BOM(b)
 	if err := json.Unmarshal(b, &f); err != nil {
 		return f, err
 	}

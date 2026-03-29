@@ -13,6 +13,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/layout"
+	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
 	"tunnelbypass/internal/elevate"
@@ -79,13 +80,16 @@ func runWizard() {
 			}
 		}
 
-		fmt.Printf("\n%s[ MAIN MENU ]%s\n", ColorBold+ColorYellow, ColorReset)
-		fmt.Printf("1) %sSetup/Reinstall Tunnel%s (Interactive Wizard)\n", ColorGreen, ColorReset)
-		fmt.Printf("2) %sDiagnostic Tools%s (Hosts)\n", ColorBlue, ColorReset)
-		fmt.Printf("3) %sHow to Use / Help%s\n", ColorCyan, ColorReset)
-		fmt.Printf("q) %sExit Application%s\n", ColorRed, ColorReset)
+		fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ║%s             %s✦  MAIN MENU  ✦%s             %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("  %s[1]%s  %sSetup / Reinstall Tunnel%s  %s(Interactive Wizard)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[2]%s  %sDiagnostic Tools%s          %s(Hosts)%s\n", ColorBold+ColorWhite, ColorReset, ColorCyan, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[3]%s  %sHow to Use / Help%s\n", ColorBold+ColorWhite, ColorReset, ColorBlue, ColorReset)
+		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
+		fmt.Printf("  %s[Q]%s  %sExit Application%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
 
-		choice := prompt(reader, fmt.Sprintf("\n%sSelect Option: %s", ColorBold, ColorReset))
+		choice := prompt(reader, fmt.Sprintf("\n%sSelect Option: %s", ColorBold+ColorYellow, ColorReset))
 
 		switch strings.ToLower(choice) {
 		case "1":
@@ -129,50 +133,177 @@ func runWizard() {
 	}
 }
 
-func runSetupWizard(reader *bufio.Reader) bool {
-	fmt.Printf("\n%s═══ TUNNEL SETUP WIZARD ═══%s\n", ColorBold+ColorGreen, ColorReset)
+// menuSep40 is ASCII-only so classic Windows CMD and UTF-8 terminals both render a clean line.
+const menuSep40 = "----------------------------------------"
 
+func stealthTag(level string) string {
+	switch level {
+	case "high":
+		return ColorBold + ColorGreen + "[HIGH]" + ColorReset
+	case "med":
+		return ColorBold + ColorYellow + "[MED] " + ColorReset
+	default:
+		return ColorBold + ColorRed + "[LOW] " + ColorReset
+	}
+}
+
+func printTunnelModeMenu() {
+	const sep = "  ─────────────────────────────────────────────────"
+	fmt.Printf("\n%s  ╔═════════════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("%s  ║%s            %s✦  TUNNEL SETUP WIZARD  ✦%s            %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("%s  ╚═════════════════════════════════════════════════╝%s\n", ColorTeal+ColorBold, ColorReset)
+	fmt.Printf("  %sSelect tunnel mode  —  higher stealth = harder to block by DPI%s\n", ColorGray, ColorReset)
+
+	fmt.Printf("\n  %s★ RECOMMENDED%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
+	fmt.Printf("  %s[1]%s  %sReality%s      %s(VLESS + XTLS Vision)%s  Stealth: %s  %sTCP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorGreen, ColorReset,
+		ColorGray, ColorReset, stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("reality"))
+	fmt.Printf("  %s[2]%s  %sQUIC%s         %s(Hysteria v2)%s           Stealth: %s  %sUDP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorMagenta, ColorReset,
+		ColorGray, ColorReset, stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("hysteria"))
+
+	fmt.Printf("\n  %s◈ BALANCED%s\n", ColorBold+ColorCyan, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
+	fmt.Printf("  %s[3]%s  %sWSS Xray%s     %s(WebSocket + TLS)%s       Stealth: %s  %sTCP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorCyan, ColorReset,
+		ColorGray, ColorReset, stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("vless-ws"))
+	fmt.Printf("  %s[4]%s  %sWireGuard%s    %s(VPN Tunnel)%s            Stealth: %s  %sUDP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorBlue, ColorReset,
+		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("wireguard"))
+
+	fmt.Printf("\n  %s◇ SIMPLE%s\n", ColorBold+ColorYellow, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
+	fmt.Printf("  %s[5]%s  %sWSTunnel%s     %s(Raw over WebSocket)%s    Stealth: %s  %sTCP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorYellow, ColorReset,
+		ColorGray, ColorReset, stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("wss"))
+	fmt.Printf("  %s[6]%s  %sTLS%s          %s(stunnel)%s               Stealth: %s  %sTCP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorWhite, ColorReset,
+		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("tls"))
+	fmt.Printf("  %s[7]%s  %sSSH Tunnel%s   %s(legacy)%s                Stealth: %s  %sTCP%s%s\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorWhite, ColorReset,
+		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("ssh"))
+
+	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
+	fmt.Printf("  %s[B]%s  Back to Main Menu    %s[Q]%s  Exit\n",
+		ColorBold+ColorWhite, ColorReset, ColorBold+ColorWhite, ColorReset)
+}
+
+// promptWSSInstallationScreen explains what the WSS (wstunnel) path actually installs and asks to proceed.
+// This project does not install Xray VLESS-WSS, Nginx, or Certbot; those are out of scope here.
+func promptWSSInstallationScreen(reader *bufio.Reader) bool {
+	wssTitleSep := "========================================"
+	fmt.Printf("\n%s%s%s\n", ColorBold+ColorCyan, wssTitleSep, ColorReset)
+	fmt.Printf("%sWSS (WebSocket + TLS) Installation%s\n", ColorBold+ColorCyan, ColorReset)
+	fmt.Printf("%s%s%s\n\n", ColorBold+ColorCyan, wssTitleSep, ColorReset)
+
+	fmt.Printf("%sSelected Mode:%s WSS (WebSocket + TLS - wstunnel)\n", ColorBold, ColorReset)
+	fmt.Printf("%sStealth Level :%s %s****%s (Balanced)\n\n", ColorBold, ColorReset, ColorYellow+ColorBold, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sWhat will be installed:%s\n\n", ColorBold, ColorReset)
+
+	fmt.Printf("%s1. wstunnel (WSS server)%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* TunnelBypass downloads/uses the wstunnel binary%s\n", ColorGray, ColorReset)
+	fmt.Printf("   %s* WebSocket + TLS listener on your chosen port (e.g. 443)%s\n", ColorGray, ColorReset)
+	fmt.Printf("   %s* TLS cert/key under the app data dir (self-signed for your SNI/domain)%s\n\n", ColorGray, ColorReset)
+
+	fmt.Printf("%s2. Embedded SSH tunnel%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* SSH serves the tunneled TCP; wstunnel restricts to localhost SSH%s\n\n", ColorGray, ColorReset)
+
+	fmt.Printf("%s3. OS service (when installed as admin/root)%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* Registers %sTunnelBypass-WSS%s (plus SSH/UDPGW peers as needed)%s\n\n", ColorGray, ColorCyan, ColorGray, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sHow it works:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %sClient -> WSS (TLS) -> wstunnel -> SSH (loopback) -> your tunnel%s\n\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- Traffic looks like HTTPS upgrade (WebSocket)%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- Path/header payload-style routing is not configured by this CLI path%s\n\n", ColorGray, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sWhat you need:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %s- A domain or hostname for TLS CN/SNI (recommended)%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- The listen port reachable from clients (often 443)%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- Administrator / root for installing Windows/Linux services%s\n\n", ColorGray, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sConfiguration (next steps in this wizard):%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %s- Domain / SNI (host catalog or custom)%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- Listen port%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- SSH user & password (for the embedded SSH)%s\n\n", ColorGray, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sNotes:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %s[+]%s Strong fit for WSS + SSH tunneling via wstunnel\n", ColorGreen+ColorBold, ColorReset)
+	fmt.Printf("  %s[+]%s Works on many networks where HTTPS/WSS are allowed\n", ColorGreen+ColorBold, ColorReset)
+	fmt.Printf("  %s[!]%s For production HTTPS with a public CA, use your own reverse proxy / certs (not automated here)\n\n", ColorYellow+ColorBold, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	ans := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sProceed with automatic installation? (y/n): %s", ColorBold, ColorReset))))
+	fmt.Printf("%s%s%s\n", ColorBold+ColorCyan, wssTitleSep, ColorReset)
+	if ans == "y" || ans == "yes" {
+		return true
+	}
+	return false
+}
+
+func runSetupWizard(reader *bufio.Reader) bool {
 	baseDir := installer.GetBaseDir()
 	_ = os.MkdirAll(filepath.Join(baseDir, "configs"), 0755)
 	_ = os.MkdirAll(filepath.Join(baseDir, "logs"), 0755)
 
-	fmt.Printf("\n%s[1] Select Tunnel Type%s\n", ColorYellow, ColorReset)
-	fmt.Printf("    %sDPI bypass stars: more stars = better%s\n", ColorGray, ColorReset)
-	realityDisabled := formatDisabled("reality")
-	wssDisabled := formatDisabled("wss")
-	tlsDisabled := formatDisabled("tls")
-	hysteriaDisabled := formatDisabled("hysteria")
-	sshDisabled := formatDisabled("ssh")
-	wireguardDisabled := formatDisabled("wireguard")
-	fmt.Printf("    1) %sReality / XTLS%s%s -> %s★★★★★%s\n", ColorGreen, ColorReset, colorForDisabled("reality")+realityDisabled, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    2) %sWSS (wstunnel)%s%s  -> %s★★★%s\n", ColorCyan, ColorReset, colorForDisabled("wss")+wssDisabled, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    3) %sTLS (stunnel)%s%s   -> %s★★★%s\n", ColorGray, ColorReset, colorForDisabled("tls")+tlsDisabled, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    4) %sQUIC (Hysteria v2)%s%s -> %s★★%s\n", ColorMagenta, ColorReset, colorForDisabled("hysteria")+hysteriaDisabled, ColorBlue+ColorBold, ColorReset)
-	fmt.Printf("    5) %sSSH%s%s             -> %s★★%s\n", ColorGray+ColorBold, ColorReset, colorForDisabled("ssh")+sshDisabled, ColorYellow+ColorBold, ColorReset)
-	fmt.Printf("    6) %sWireGuard%s%s -> %s★%s\n", ColorBlue, ColorReset, colorForDisabled("wireguard")+wireguardDisabled, ColorGray+ColorBold, ColorReset)
-	fmt.Printf("    %sb)%s %sBack to Main Menu%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+	printTunnelModeMenu()
 
-	choice := strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice [1-6 or b]: %s", ColorBold, ColorReset)))
-	if choice == "b" || choice == "back" {
+	menuChoice := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sChoice: %s", ColorBold, ColorReset))))
+	if menuChoice == "b" || menuChoice == "back" {
 		return false
 	}
-	switch choice {
+	if menuChoice == "q" || menuChoice == "exit" {
+		fmt.Printf("\n%sGoodbye!%s\n", ColorCyan, ColorReset)
+		os.Exit(0)
+	}
+
+	var internalChoice string
+	switch menuChoice {
 	case "1":
-		choice = "1" // Reality
+		internalChoice = "1" // reality
 	case "2":
-		choice = "7" // WSS (wstunnel)
+		internalChoice = "6" // hysteria
 	case "3":
-		choice = "4" // SSL (stunnel)
+		internalChoice = "8" // vless-ws (Xray)
 	case "4":
-		choice = "6" // Hysteria
+		internalChoice = "2" // wireguard
 	case "5":
-		choice = "3" // SSH
+		internalChoice = "7" // wss (wstunnel)
 	case "6":
-		choice = "2" // WireGuard
+		internalChoice = "4" // tls
+	case "7":
+		internalChoice = "3" // ssh
+	default:
+		internalChoice = ""
+	}
+
+	transport := wizardChoiceToTransport(internalChoice)
+	if transport == "" {
+		fmt.Printf("%sInvalid choice.%s\n", ColorRed, ColorReset)
+		return false
+	}
+	if cfg.IsDisabled(transport) {
+		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled (known issues).%s\n", ColorRed, transport, ColorReset)
+		fmt.Printf("    %sChoose another option, e.g. Reality (1), QUIC (2), WSS Xray (3), or TLS (6).%s\n", ColorGray, ColorReset)
+		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to selection...%s", ColorGray, ColorReset))
+		return false
+	}
+	var wsPathInput string
+	var uuidCustom string
+	if transport == "wss" {
+		if !promptWSSInstallationScreen(reader) {
+			return false
+		}
 	}
 
 	var sni string
-	if choice == "2" {
+	if internalChoice == "2" {
 		fmt.Printf("\n%s[2] Tunnel hostname (SNI / bug host)%s %sskipped for this tunnel type%s\n", ColorYellow, ColorReset, ColorGray, ColorReset)
 		sni = ""
 	} else {
@@ -235,17 +366,9 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		detectedIP = prompt(reader, fmt.Sprintf("    %sEnter Server IP Address manually: %s", ColorBold, ColorReset))
 	}
 
-	transport := wizardChoiceToTransport(choice)
-	if transport == "" {
-		fmt.Printf("%sInvalid choice.%s\n", ColorRed, ColorReset)
-		return false
-	}
-
-	if cfg.IsDisabled(transport) {
-		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled (known issues).%s\n", ColorRed, transport, ColorReset)
-		fmt.Printf("    %sChoose another option, e.g. Reality (1), Hysteria (4), WSS (2), or TLS (3).%s\n", ColorGray, ColorReset)
-		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to selection...%s", ColorGray, ColorReset))
-		return false
+	if transport == "vless-ws" {
+		wsPathInput = strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sWebSocket path (e.g. /ws, /api) [%s]: %s", ColorYellow, "/", ColorBold)))
+		wsPathInput = vless.NormalizeWSPath(wsPathInput)
 	}
 
 	defaultPort := 443
@@ -272,20 +395,28 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
-	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "wss" || transport == "tls"
+	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "vless-ws" || transport == "wss" || transport == "tls"
 
 	if (transport == "ssh" || transport == "wss" || transport == "tls") &&
 		(strings.EqualFold(strings.TrimSpace(sshPass), "auto") || strings.TrimSpace(sshPass) == "") {
-		sshPass = utils.GenerateUUID()
+		// Use the persistent password stored in embed_password.txt (creating it on first run).
+		// This ensures the same password is used across wizard runs and running services,
+		// preventing "Permission denied" when the service was started with a previous password.
+		sshPass = installer.ReadOrCreateEmbedSSHPassword()
 	}
 
 	rspec := cfg.RunSpec{
 		Transport: transport,
 		Port:      port,
 		SNI:       strings.TrimSpace(sni),
+		WSPath:    wsPathInput,
 	}
 	rspec.Server.Address = strings.TrimSpace(detectedIP)
-	rspec.Auth.UUID = "auto"
+	if transport == "vless-ws" && uuidCustom != "" {
+		rspec.Auth.UUID = uuidCustom
+	} else {
+		rspec.Auth.UUID = "auto"
+	}
 	rspec.Auth.SSHUser = sshUser
 	rspec.Auth.SSHPass = sshPass
 	switch transport {
@@ -314,6 +445,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 			Port:        rspec.Port,
 			SSHUser:     rspec.Auth.SSHUser,
 			SSHPassword: rspec.Auth.SSHPass,
+			WSPath:      strings.TrimSpace(rspec.WSPath),
 		}
 		if err := runTryInstallService(slog.Default(), rspec.Transport, opt, elevate.IsAdmin()); err != nil {
 			fmt.Printf("\n%s✗ Service install failed: %v%s\n", ColorRed, err, ColorReset)
@@ -360,6 +492,8 @@ func wizardChoiceToTransport(choice string) string {
 		return "hysteria"
 	case "7":
 		return "wss"
+	case "8":
+		return "vless-ws"
 	default:
 		return ""
 	}
@@ -375,6 +509,8 @@ func preferredServiceNameForTransport(transport string) string {
 		return "TunnelBypass-WireGuard"
 	case "wss":
 		return "TunnelBypass-WSS"
+	case "vless-ws":
+		return "TunnelBypass-VLESS-WS"
 	case "tls":
 		return "TunnelBypass-SSL"
 	default:
@@ -382,17 +518,9 @@ func preferredServiceNameForTransport(transport string) string {
 	}
 }
 
-
-func formatDisabled(t string) string {
+func itemDisabledSuffix(t string) string {
 	if cfg.IsDisabled(t) {
-		return "(DISABLED)"
-	}
-	return ""
-}
-
-func colorForDisabled(t string) string {
-	if cfg.IsDisabled(t) {
-		return ColorRed
+		return "  " + ColorRed + "(DISABLED)" + ColorReset
 	}
 	return ""
 }

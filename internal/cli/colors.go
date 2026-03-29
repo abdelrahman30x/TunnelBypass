@@ -13,4 +13,7 @@ const (
 	ColorMagenta = uicolors.ColorMagenta
 	ColorCyan    = uicolors.ColorCyan
 	ColorGray    = uicolors.ColorGray
+	ColorWhite   = uicolors.ColorWhite
+	ColorOrange  = uicolors.ColorOrange
+	ColorTeal    = uicolors.ColorTeal
 )

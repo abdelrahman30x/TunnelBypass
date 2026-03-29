@@ -55,10 +55,6 @@ function Log-Step { param($msg) Write-Host "${Cyan}${Bold}[STEP]${Reset} $msg" }
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 
-if ([string]::IsNullOrEmpty($ReleaseDir)) {
-    $ReleaseDir = $ProjectDir
-}
-
 # Validate parameters
 if ([string]::IsNullOrEmpty($Password) -and [string]::IsNullOrEmpty($KeyFile)) {
     Log-Error "Either Password or KeyFile is required"
@@ -70,37 +66,46 @@ if (-not [string]::IsNullOrEmpty($KeyFile) -and -not (Test-Path $KeyFile)) {
     exit 1
 }
 
-# Detect latest version
+# Detect latest version (release artifacts live under build/<version>/ per build-release.ps1)
 function Detect-LatestVersion {
     Log-Step "Detecting latest version..."
 
     if (-not [string]::IsNullOrEmpty($Version)) {
         Log-Info "Using specified version: $Version"
-        return
-    }
+    } else {
+        $versionFile = Join-Path $ProjectDir "VERSION"
+        if (Test-Path $versionFile) {
+            $script:Version = (Get-Content $versionFile).Trim()
+        }
 
-    $versionFile = Join-Path $ReleaseDir "VERSION"
-    if (Test-Path $versionFile) {
-        $script:Version = (Get-Content $versionFile).Trim()
-    }
-
-    if ([string]::IsNullOrEmpty($Version)) {
-        # Try to parse from filenames
-        $files = Get-ChildItem -Path "$ReleaseDir\tunnelbypass_*_linux_amd64.tar.gz" -ErrorAction SilentlyContinue
-        if ($files) {
-            $name = $files[0].Name
-            if ($name -match 'tunnelbypass_([^_]+)_linux_amd64\.tar\.gz') {
-                $script:Version = $matches[1]
+        if ([string]::IsNullOrEmpty($Version)) {
+            $buildRoot = Join-Path $ProjectDir "build"
+            $files = @()
+            if (Test-Path $buildRoot) {
+                $files = Get-ChildItem -Path $buildRoot -Recurse -Filter "tunnelbypass_*_linux_amd64.tar.gz" -File -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending
+            }
+            if ($files) {
+                $name = $files[0].Name
+                if ($name -match 'tunnelbypass_([^_]+)_linux_amd64\.tar\.gz') {
+                    $script:Version = $matches[1]
+                }
             }
         }
+
+        if ([string]::IsNullOrEmpty($Version)) {
+            Log-Error "Could not detect version. Please specify with -Version"
+            exit 1
+        }
+
+        Log-Success "Detected version: $Version"
     }
 
-    if ([string]::IsNullOrEmpty($Version)) {
-        Log-Error "Could not detect version. Please specify with -Version"
-        exit 1
+    if ([string]::IsNullOrEmpty($ReleaseDir)) {
+        $resolved = Join-Path (Join-Path $ProjectDir "build") $Version
+        Set-Variable -Name ReleaseDir -Scope Script -Value $resolved
+        Log-Info "Release directory (default): $ReleaseDir"
     }
-
-    Log-Success "Detected version: $Version"
 }
 
 # Detect remote system using SSH
@@ -220,7 +225,7 @@ function Install-Remote {
     Log-Step "Installing on remote server..."
 
     if ($DryRun) {
-        Log-Warn "[DRY-RUN] Would install binary"
+        Log-Warn "[DRY-RUN] Would stop TunnelBypass services, replace binary, verify"
         return
     }
 
@@ -234,13 +239,25 @@ function Install-Remote {
     $destDir = "/root/tunnelbypass"
     $filename = Split-Path $ReleaseFile -Leaf
 
-    $cmds = @(
-        "cd $destDir"
-        if ($filename -match "\.tar\.gz$") { "tar -xzf $filename" }
-        "chmod +x tunnelbypass"
-        "mv -f tunnelbypass /usr/local/bin/tunnelbypass"
-        "tunnelbypass version"
-    ) -join " && "
+    # Stop any systemd units using /usr/local/bin/tunnelbypass so replace does not fail (ETXTBUSY).
+    $stopUnits = 'for u in TunnelBypass-SSH-Forwarder TunnelBypass-SSH TunnelBypass-WSS TunnelBypass-SSL TunnelBypass-VLESS-WS TunnelBypass-VLESS TunnelBypass-Hysteria TunnelBypass-WireGuard TunnelBypass-Tunnel TunnelBypass-UDP TunnelBypass-UDPGW; do systemctl stop $u 2>/dev/null || true; done'
+
+    $parts = @()
+    if ($RemoteOs -eq "linux") {
+        Log-Info "Stopping TunnelBypass services (if any) before replacing binary..."
+        $parts += $stopUnits
+        $parts += "sleep 1"
+    }
+    $parts += "cd $destDir"
+    $parts += "rm -f tunnelbypass"
+    if ($filename -match "\.tar\.gz$") {
+        $parts += "tar -xzf $filename"
+    }
+    $parts += "chmod +x tunnelbypass"
+    $parts += "install -m 0755 tunnelbypass /usr/local/bin/tunnelbypass"
+    $parts += "tunnelbypass -version"
+
+    $cmds = $parts -join " && "
 
     Log-Info "Running installation commands..."
     Invoke-Expression "$sshCmd '$cmds'"
@@ -276,9 +293,17 @@ function Restart-Services {
 
     $cmds = @(
         "systemctl daemon-reload"
-        "systemctl restart TunnelBypass-SSH 2>/dev/null || true"
-        "systemctl restart TunnelBypass-WSS 2>/dev/null || true"
         "systemctl restart TunnelBypass-UDPGW 2>/dev/null || true"
+        "systemctl restart TunnelBypass-SSH 2>/dev/null || true"
+        "systemctl restart TunnelBypass-SSH-Forwarder 2>/dev/null || true"
+        "systemctl restart TunnelBypass-SSL 2>/dev/null || true"
+        "systemctl restart TunnelBypass-WSS 2>/dev/null || true"
+        "systemctl restart TunnelBypass-VLESS-WS 2>/dev/null || true"
+        "systemctl restart TunnelBypass-VLESS 2>/dev/null || true"
+        "systemctl restart TunnelBypass-Hysteria 2>/dev/null || true"
+        "systemctl restart TunnelBypass-WireGuard 2>/dev/null || true"
+        "systemctl restart TunnelBypass-Tunnel 2>/dev/null || true"
+        "systemctl restart TunnelBypass-UDP 2>/dev/null || true"
     ) -join " && "
 
     Log-Info "Restarting services..."
@@ -304,7 +329,7 @@ function Validate-Installation {
     }
 
     Log-Info "Checking version..."
-    $version = Invoke-Expression "$sshCmd 'tunnelbypass version'" 2>$null
+    $version = Invoke-Expression "$sshCmd 'tunnelbypass -version'" 2>$null
 
     if ($version -match "VERSION_CHECK_FAILED|not found") {
         Log-Error "Validation failed"

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"tunnelbypass/internal/utils"
 )
 
 // ValidateTunnelConfigFile checks the config file is non-empty and, for JSON configs, syntactically valid.
@@ -22,10 +24,8 @@ func ValidateTunnelConfigFile(path string) error {
 		}
 		return err
 	}
+	b = utils.StripUTF8BOM(b)
 	trim := bytes.TrimSpace(b)
-	if bytes.HasPrefix(trim, []byte{0xef, 0xbb, 0xbf}) {
-		trim = trim[3:]
-	}
 	if len(trim) == 0 {
 		return fmt.Errorf("config file is empty: %s", path)
 	}

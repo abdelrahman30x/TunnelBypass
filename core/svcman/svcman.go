@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tunnelbypass/internal/runtimeenv"
+	"tunnelbypass/internal/utils"
 )
 
 // Config describes a supervised process (native service or user-mode).
@@ -361,6 +362,7 @@ func ReadPID(baseDir, name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	b = utils.StripUTF8BOM(b)
 	var pid int
 	_, err = fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &pid)
 	return pid, err

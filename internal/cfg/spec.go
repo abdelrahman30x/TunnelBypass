@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/provision"
 	"tunnelbypass/internal/utils"
@@ -17,6 +18,8 @@ type RunSpec struct {
 	Transport string `json:"transport"`
 	Port      int    `json:"port"`
 	SNI       string `json:"sni"`
+	// WSPath WebSocket path for transport vless-ws (VLESS + WS + TLS).
+	WSPath string `json:"ws_path,omitempty"`
 
 	Server struct {
 		Address string `json:"address"`
@@ -60,6 +63,7 @@ func LoadJSONFile(path string) (RunSpec, error) {
 	if err != nil {
 		return s, err
 	}
+	b = utils.StripUTF8BOM(b)
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&s); err != nil {
@@ -78,6 +82,9 @@ func Merge(base, override RunSpec) RunSpec {
 	}
 	if strings.TrimSpace(override.SNI) != "" {
 		out.SNI = strings.TrimSpace(override.SNI)
+	}
+	if strings.TrimSpace(override.WSPath) != "" {
+		out.WSPath = strings.TrimSpace(override.WSPath)
 	}
 	if strings.TrimSpace(override.Server.Address) != "" {
 		out.Server.Address = strings.TrimSpace(override.Server.Address)
@@ -131,6 +138,8 @@ func NormalizeTransport(t string) string {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "reality", "vless":
 		return "reality"
+	case "vless-ws", "vlessws", "xray-wss", "xraywss":
+		return "vless-ws"
 	case "wss", "wstunnel":
 		return "wss"
 	case "tls", "stunnel":
@@ -185,14 +194,17 @@ func FillDefaults(s *RunSpec) {
 		s.Server.Address = provision.ResolveServerAddr(s.Server.Address)
 	}
 	if strings.EqualFold(strings.TrimSpace(s.Auth.SSHPass), "auto") || strings.TrimSpace(s.Auth.SSHPass) == "" {
-		s.Auth.SSHPass = utils.GenerateUUID()
+		s.Auth.SSHPass = installer.ReadOrCreateEmbedSSHPassword()
 	}
 	if strings.TrimSpace(s.Auth.SSHUser) == "" {
 		s.Auth.SSHUser = "tunnelbypass"
 	}
+	if strings.TrimSpace(s.WSPath) == "" && s.Transport == "vless-ws" {
+		s.WSPath = "/"
+	}
 	if s.Port == 0 {
 		switch s.Transport {
-		case "reality", "wss", "tls":
+		case "reality", "wss", "tls", "vless-ws":
 			s.Port = 443
 		case "hysteria":
 			s.Port = 8443

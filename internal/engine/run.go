@@ -63,7 +63,7 @@ func conflictCommandHint(spec cfg.RunSpec) string {
 
 func transportInstallsOSService(transport string) bool {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
-	case "reality", "vless", "hysteria", "wireguard", "wss", "tls":
+	case "reality", "vless", "vless-ws", "hysteria", "wireguard", "wss", "tls":
 		return true
 	default:
 		return false
@@ -173,7 +173,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	if spec.Transport == "tls" {
 		pOpts.StunnelAccept = spec.Port
 	}
-	if spec.Transport == "reality" || spec.Transport == "hysteria" {
+	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" {
 		pOpts.ConfigPath = res.ServerConfigPath
 	}
 
@@ -294,7 +294,7 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 	fmt.Printf("  %sType:%s       %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, typeLabel, uicolors.ColorReset)
 	fmt.Printf("  %sServer:%s     %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, endpoint, uicolors.ColorReset)
 	if transportName == "ssh" {
-		fmt.Printf("  %sSSH port:%s   %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Port, uicolors.ColorReset)
+		fmt.Printf("  %sSSH port:%s   %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, externalPort, uicolors.ColorReset)
 	} else {
 		fmt.Printf("  %sListen port:%s %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Port, uicolors.ColorReset)
 		internalNote := "(for WSS)"
@@ -325,7 +325,7 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 	fmt.Printf("\n  %sCommands%s\n", uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset)
 	switch transportName {
 	case "ssh":
-		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, spec.Port, spec.Auth.SSHUser, endpoint, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, externalPort, spec.Auth.SSHUser, endpoint, uicolors.ColorReset)
 	case "tls":
 		tlsLocal := tbssh.TLSClientLocalSSHPort()
 		fmt.Printf("  %s·%s %sstunnel %s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, filepath.Join(installer.GetConfigDir("stunnel"), "stunnel-client.conf"), uicolors.ColorReset)
@@ -383,7 +383,7 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 	}
 
 	switch transportName {
-	case "reality", "hysteria":
+	case "reality", "hysteria", "vless-ws":
 		if res.SharingLink != "" {
 			fmt.Printf("\n  %s════════════════════════════════════════════════════════════%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
 			fmt.Printf("  %s                [ SHARING LINK - COPY THIS ]%s\n", uicolors.ColorBold+uicolors.ColorGreen, uicolors.ColorReset)
@@ -406,8 +406,8 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 			fmt.Printf("  %sHandshake needs UDP/%d reachable from the client: allow it in the cloud provider firewall/security group and on the host (tunnelbypass opens rules when run as root).%s\n", uicolors.ColorGray, spec.Port, uicolors.ColorReset)
 			fmt.Printf("  %sIf you changed keys or re-ran the wizard, re-import the new client config on every device.%s\n", uicolors.ColorGray, uicolors.ColorReset)
 		}
-		if runtime.GOOS == "linux" {
-			fmt.Printf("  %sServer check: wg show wg_server — if handshakes fail, peer rx/last handshake stay empty.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+			fmt.Printf("  %sServer check: run `wg show` (interface may be wg_server on Linux or utun*/wg* on macOS) — if handshakes fail, peer rx/last handshake stay empty.%s\n", uicolors.ColorGray, uicolors.ColorReset)
 		}
 		fmt.Printf("\n  %s[ SCAN FOR MOBILE APPS ]%s\n", uicolors.ColorYellow, uicolors.ColorReset)
 		fmt.Printf("  %sScan WG QR from your app if you generated one under configs/wireguard.%s\n", uicolors.ColorGray, uicolors.ColorReset)

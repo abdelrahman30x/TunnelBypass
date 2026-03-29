@@ -137,6 +137,51 @@ func provisionReality(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 	return r, nil
 }
 
+func provisionVlessWS(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = "vless-ws"
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	ensureHost(&opt)
+	if opt.Port == 0 {
+		opt.Port = 443
+	}
+	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-VLESS-WS")
+
+	opt.WSPath = vless.NormalizeWSPath(opt.WSPath)
+	opt.UUID = NormalizeUUID(opt.UUID)
+
+	srv, err := vless.GenerateVlessWSServerConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("vless-ws server config: %w", err)
+	}
+	cli, err := vless.GenerateVlessWSClientConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("vless-ws client config: %w", err)
+	}
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.SharingLink = vless.GenerateVlessWSURL(opt)
+
+	configsDir := installer.GetConfigDir("vless-ws")
+	_ = os.MkdirAll(configsDir, 0755)
+	_ = os.WriteFile(filepath.Join(configsDir, "sharing-link.txt"),
+		[]byte("# Tunnel — VLESS WebSocket+TLS\n"+r.SharingLink+"\n"), 0644)
+
+	qrPath := filepath.Join(configsDir, "qr-vless-ws.png")
+	if err := utils.SaveQRCodePNG(qrPath, r.SharingLink, 320); err != nil && log != nil {
+		log.Warn("provision: qr png", "err", err)
+	}
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+	r.ListenPort = opt.Port
+	return r, nil
+}
+
 func provisionHysteria(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
 	var r Result
 	opt.Transport = types.TransportHysteria
@@ -238,7 +283,7 @@ func provisionSSH(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 		opt.SSHUser = "tunnelbypass"
 	}
 	if strings.TrimSpace(opt.SSHPassword) == "" {
-		opt.SSHPassword = utils.GenerateUUID()
+		opt.SSHPassword = installer.ReadOrCreateEmbedSSHPassword()
 	}
 	if strings.TrimSpace(opt.SSHWelcomeMessage) == "" {
 		opt.SSHWelcomeMessage = fmt.Sprintf("Welcome to TunnelBypass SSH Tunnel.\nAuthorized users only.\nUser: %s", opt.SSHUser)
@@ -273,7 +318,7 @@ func provisionTLS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 		opt.SSHUser = "tunnelbypass"
 	}
 	if strings.TrimSpace(opt.SSHPassword) == "" {
-		opt.SSHPassword = utils.GenerateUUID()
+		opt.SSHPassword = installer.ReadOrCreateEmbedSSHPassword()
 	}
 	if strings.TrimSpace(opt.SSHWelcomeMessage) == "" {
 		opt.SSHWelcomeMessage = fmt.Sprintf("Welcome to TunnelBypass SSH Tunnel over SSL.\nAuthorized users only.\nUser: %s", opt.SSHUser)
@@ -315,7 +360,7 @@ func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 		opt.SSHUser = "tunnelbypass"
 	}
 	if strings.TrimSpace(opt.SSHPassword) == "" {
-		opt.SSHPassword = utils.GenerateUUID()
+		opt.SSHPassword = installer.ReadOrCreateEmbedSSHPassword()
 	}
 	if strings.TrimSpace(opt.SSHWelcomeMessage) == "" {
 		opt.SSHWelcomeMessage = fmt.Sprintf("Welcome to TunnelBypass SSH Tunnel over WSS.\nAuthorized users only.\nUser: %s", opt.SSHUser)
@@ -393,6 +438,10 @@ func NeedsProvision(transport string) bool {
 	switch t {
 	case "reality", "vless":
 		p := filepath.Join(installer.GetConfigDir("vless"), "server.json")
+		_, err := os.Stat(p)
+		return err != nil
+	case "vless-ws":
+		p := filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
 		_, err := os.Stat(p)
 		return err != nil
 	case "hysteria":

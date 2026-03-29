@@ -2,6 +2,7 @@ package portable
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/internal/runtimeenv"
+	"tunnelbypass/internal/utils"
 )
 
 type RegistryFile struct {
@@ -44,6 +46,7 @@ func ReadRegistry() (RegistryFile, error) {
 		}
 		return rf, err
 	}
+	b = utils.StripUTF8BOM(b)
 	if err := json.Unmarshal(b, &rf); err != nil {
 		return rf, err
 	}
@@ -57,7 +60,10 @@ func patchRegistry(mut func(*RegistryFile)) error {
 	_ = os.MkdirAll(filepath.Dir(path), 0755)
 	var rf RegistryFile
 	if b, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(b, &rf)
+		b = utils.StripUTF8BOM(b)
+		if err := json.Unmarshal(b, &rf); err != nil {
+			slog.Default().Warn("registry: corrupt json, starting fresh merge", "path", path, "err", err)
+		}
 	}
 	if rf.Transports == nil {
 		rf.Transports = map[string]*RegistryEntry{}

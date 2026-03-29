@@ -14,6 +14,7 @@ type ConfigOptions struct {
 	RealityDest  string   `json:"reality_dest"`
 	Host         string   `json:"host"`
 	ObfsPassword string   `json:"obfs_password"`
+	WSPath       string   `json:"ws_path"`
 
 	SSHUser           string `json:"ssh_user"`
 	SSHPassword       string `json:"ssh_password"`

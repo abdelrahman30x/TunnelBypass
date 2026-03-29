@@ -37,6 +37,10 @@ func OpenFirewallPort(port int, protocol, name string) error {
 			"name="+ruleName, "dir=in", "action=allow", "protocol="+strings.ToUpper(protocol), "localport="+portStr)
 		return cmd.Run()
 	}
+	if runtime.GOOS == "darwin" {
+		fmt.Fprintf(os.Stderr, "[!] Skipped automatic inbound firewall rule for %q port %d/%s: macOS uses Application Firewall and pf, not ufw/iptables. If remote clients cannot connect, allow this app or TCP %s in System Settings > Network > Firewall, or configure pf.\n", ruleName, port, protocol, portStr)
+		return nil
+	}
 	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
 		fmt.Fprintf(os.Stderr, "[!] Skipped automatic inbound allow for %q port %d/%s (not root). Configure ufw, firewalld, or iptables if needed.\n", ruleName, port, protocol)
 		return nil
@@ -91,6 +95,10 @@ func CloseFirewallPort(port int, protocol, name string) error {
 		return nil
 	}
 
+	if runtime.GOOS == "darwin" {
+		return nil
+	}
+
 	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
 		return nil
 	}
@@ -123,6 +131,10 @@ func OpenFirewallOutboundPort(remotePort int, protocol, name string) error {
 		cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
 			"name="+name, "dir=out", "action=allow", "protocol="+strings.ToUpper(protocol), "remoteport="+portStr)
 		return cmd.Run()
+	}
+
+	if runtime.GOOS == "darwin" {
+		return nil
 	}
 
 	if _, err := exec.LookPath("ufw"); err == nil {

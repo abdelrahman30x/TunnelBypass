@@ -3,10 +3,12 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/internal/utils"
 )
 
 type portAllocRecord struct {
@@ -24,7 +26,10 @@ func loadPortAllocState() map[string]portAllocRecord {
 	if err != nil {
 		return out
 	}
-	_ = json.Unmarshal(b, &out)
+	b = utils.StripUTF8BOM(b)
+	if err := json.Unmarshal(b, &out); err != nil {
+		slog.Default().Warn("port-alloc: ignoring corrupt state file", "path", portAllocStatePath(), "err", err)
+	}
 	return out
 }
 

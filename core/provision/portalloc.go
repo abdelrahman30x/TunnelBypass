@@ -25,7 +25,10 @@ func loadPortAllocState() map[string]portAllocRecord {
 	if err != nil {
 		return out
 	}
-	_ = json.Unmarshal(b, &out)
+	b = utils.StripUTF8BOM(b)
+	if err := json.Unmarshal(b, &out); err != nil {
+		slog.Warn("port-alloc: ignoring corrupt state file", "path", portAllocStatePath(), "err", err)
+	}
 	return out
 }
 

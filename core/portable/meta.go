@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"tunnelbypass/internal/runtimeenv"
+	"tunnelbypass/internal/utils"
 )
 
 // RunMeta is persisted under run/ for status and tooling.
@@ -59,6 +60,7 @@ func ReadRunMeta(baseDir, transport string) (RunMeta, error) {
 	if err != nil {
 		return m, err
 	}
+	b = utils.StripUTF8BOM(b)
 	err = json.Unmarshal(b, &m)
 	return m, err
 }

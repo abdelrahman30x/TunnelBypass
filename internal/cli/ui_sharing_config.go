@@ -36,6 +36,7 @@ func displayTunnelSharingLinks(serviceName string) {
 			fmt.Printf("    ✗ Error reading config: %v\n", err)
 			return
 		}
+		data = utils.StripUTF8BOM(data)
 		var cfg map[string]interface{}
 		if yaml.Unmarshal(data, &cfg) != nil {
 			fmt.Println("    ✗ Invalid config")
@@ -78,6 +79,7 @@ func displayTunnelSharingLinks(serviceName string) {
 		fmt.Printf("    ✗ Error reading config: %v\n", err)
 		return
 	}
+	data = utils.StripUTF8BOM(data)
 	var cfg map[string]interface{}
 	if json.Unmarshal(data, &cfg) != nil {
 		fmt.Println("    ✗ Invalid config JSON")
@@ -173,6 +175,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		fmt.Printf("    ✗ Error reading config: %v\n", err)
 		return
 	}
+	data = utils.StripUTF8BOM(data)
 	var cfg map[string]interface{}
 	if json.Unmarshal(data, &cfg) != nil {
 		fmt.Println("    ✗ Invalid config JSON")
@@ -205,6 +208,7 @@ func readListenPort(configPath string, defaultPort int) int {
 	if err != nil {
 		return defaultPort
 	}
+	data = utils.StripUTF8BOM(data)
 	var cfg map[string]interface{}
 	if yaml.Unmarshal(data, &cfg) != nil {
 		return defaultPort

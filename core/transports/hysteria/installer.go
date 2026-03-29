@@ -8,6 +8,8 @@ import (
 	"tunnelbypass/core/installer"
 
 	"gopkg.in/yaml.v3"
+
+	"tunnelbypass/internal/utils"
 )
 
 // InstallHysteriaService registers hysteria with the TunnelBypass service wrapper.
@@ -43,6 +45,7 @@ func sanitizeObfsInServerConfig(configPath string) error {
 	if err != nil {
 		return err
 	}
+	data = utils.StripUTF8BOM(data)
 	var root map[string]interface{}
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return err

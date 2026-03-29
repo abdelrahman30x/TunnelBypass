@@ -117,6 +117,23 @@ func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort in
 	if wanted22 && pref == 0 {
 		log.Info("embedded ssh: not using port 22 (conflicts with system sshd by default)")
 	}
+
+	// If the embedded SSH was already started during provisioning (EnsureSSHServerWithAuth),
+	// reuse it instead of starting a second listener on the same port.
+	// This avoids a double-bind on Windows where IsPortAvailable checks 0.0.0.0 but
+	// the existing listener is on 127.0.0.1.
+	if pref > 0 && installer.PortListening(pref) && installer.SSHEmbedActive() {
+		log.Info("portable ssh embed: reusing existing listener", "port", pref, "pid", os.Getpid())
+		_ = WriteRunMeta(installer.GetBaseDir(), "ssh", RunMeta{
+			Ports: map[string]int{"ssh": pref, "udpgw": udpgwPort},
+		})
+		tbssh.StartSOCKS5IfConfigured(ctx, log)
+		<-ctx.Done()
+		installer.StopEmbeddedSSHServer()
+		tbssh.UseSystemBackend()
+		return ctx.Err()
+	}
+
 	sshPort = installer.EnsureFreeTCPPort(pref, "sshembed")
 
 	u, pw := resolveEmbedCredentials(username, password)

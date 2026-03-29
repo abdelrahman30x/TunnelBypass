@@ -12,6 +12,7 @@ import (
 
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/types"
+	"tunnelbypass/internal/utils"
 )
 
 // SpecFile is --spec JSON/YAML.
@@ -55,6 +56,7 @@ func LoadSpec(path string) (SpecFile, error) {
 	if err != nil {
 		return f, err
 	}
+	b = utils.StripUTF8BOM(b)
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".yaml", ".yml":
