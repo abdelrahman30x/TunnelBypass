@@ -180,6 +180,13 @@ func (m *winSWManager) Install(c Config) error {
 
 	wrapperExe := filepath.Join(svcDir, c.Name+".exe")
 	wrapperXML := filepath.Join(svcDir, c.Name+".xml")
+	// Stop/uninstall before overwriting the WinSW wrapper — otherwise CopyFile fails with
+	// "The process cannot access the file because it is being used by another process."
+	if _, err := os.Stat(wrapperExe); err == nil {
+		_ = execRun(wrapperExe, "stop")
+		_ = execRun(wrapperExe, "uninstall")
+		time.Sleep(700 * time.Millisecond)
+	}
 	if err := m.deps.CopyFile(winsw, wrapperExe, 0755); err != nil {
 		return err
 	}
