@@ -20,6 +20,7 @@ import (
 	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/elevate"
 	"tunnelbypass/internal/health"
+	"tunnelbypass/internal/runtimeenv"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/terminal"
 	"tunnelbypass/tools/host_catalog"
@@ -59,6 +60,11 @@ func Main() {
 	tblog.Init()
 	if v := strings.TrimSpace(os.Getenv("TUNNELBYPASS_DATA_DIR")); v != "" {
 		installer.SetDataRootOverride(v)
+	}
+
+	if os.Getenv("TUNNELBYPASS_ENV_PROBE") == "1" {
+		p := runtimeenv.Probe()
+		runtimeenv.WriteProbeSummary(os.Stderr, p)
 	}
 
 	if i := subcommandIndex("run"); i >= 0 {
@@ -119,6 +125,10 @@ func Main() {
 	debug.Init(*debugFlag)
 	tblog.ApplyDebug(debug.Enabled())
 	debug.ConfigureLog()
+	if debug.Enabled() {
+		p := runtimeenv.Probe()
+		debug.Logf("%s", runtimeenv.FormatProbeForDebug(p))
+	}
 	debug.Logf("version=%s args=%q", version, os.Args)
 	debug.Logf("default config path=%s", *configFlag)
 
@@ -294,6 +304,9 @@ func printUsage() {
 	fmt.Println("  health  - Same as status")
 	fmt.Println("\nFlags:")
 	flag.PrintDefaults()
+	fmt.Println("\nEnvironment:")
+	fmt.Println("  TUNNELBYPASS_DATA_DIR      Override data directory (see installer)")
+	fmt.Println("  TUNNELBYPASS_ENV_PROBE=1   Print host probe (root, iptables/nft, container, sysctl.d writable) to stderr at startup")
 	fmt.Println("\nUse flags (e.g. --debug, --portable, --data-dir) and config files under the data directory.")
 }
 

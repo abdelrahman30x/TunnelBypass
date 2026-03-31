@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"math/rand"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -62,7 +64,7 @@ func init() {
 	seenCat := map[string]bool{}
 	addHostsForCategory := func(cat string, hosts []string) {
 		for _, h := range hosts {
-			nh := normalizeHost(h)
+			nh := NormalizeHost(h)
 			if nh == "" {
 				continue
 			}
@@ -98,21 +100,53 @@ func catalogPath() string {
 	return filepath.Join(installer.GetConfigDir("catalog"), "hosts.json")
 }
 
-func normalizeHost(h string) string {
-	h = strings.TrimSpace(strings.ToLower(h))
-	h = strings.TrimPrefix(h, "https://")
-	h = strings.TrimPrefix(h, "http://")
-	if i := strings.Index(h, "/"); i >= 0 {
-		h = h[:i]
+// NormalizeHost returns a hostname suitable for SNI from a bare host, a full URL (https://…),
+// or pasted host/path. Scheme, path, query, fragment, and port are stripped.
+func NormalizeHost(h string) string {
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return ""
 	}
-	return h
+	h = strings.ToLower(h)
+	if strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://") {
+		u, err := url.Parse(h)
+		if err == nil && u.Host != "" {
+			h = u.Host
+		} else {
+			h = strings.TrimPrefix(h, "https://")
+			h = strings.TrimPrefix(h, "http://")
+			if i := strings.Index(h, "/"); i >= 0 {
+				h = h[:i]
+			}
+			if i := strings.Index(h, "?"); i >= 0 {
+				h = h[:i]
+			}
+			if i := strings.Index(h, "#"); i >= 0 {
+				h = h[:i]
+			}
+		}
+	} else {
+		if i := strings.Index(h, "/"); i >= 0 {
+			h = h[:i]
+		}
+		if i := strings.Index(h, "?"); i >= 0 {
+			h = h[:i]
+		}
+		if i := strings.Index(h, "#"); i >= 0 {
+			h = h[:i]
+		}
+	}
+	if host, _, err := net.SplitHostPort(h); err == nil {
+		h = host
+	}
+	return strings.TrimSpace(h)
 }
 
 func uniqueHosts(in []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, h := range in {
-		n := normalizeHost(h)
+		n := NormalizeHost(h)
 		if n == "" || seen[n] {
 			continue
 		}
@@ -170,7 +204,7 @@ func DefaultHosts() []string {
 
 // AddHost appends a host to the persistent JSON catalog.
 func AddHost(host string) (bool, error) {
-	h := normalizeHost(host)
+	h := NormalizeHost(host)
 	if h == "" {
 		return false, nil
 	}
@@ -186,7 +220,7 @@ func AddHost(host string) (bool, error) {
 
 // RemoveHost removes a host from the persistent JSON catalog.
 func RemoveHost(host string) (bool, error) {
-	h := normalizeHost(host)
+	h := NormalizeHost(host)
 	if h == "" {
 		return false, nil
 	}
@@ -329,7 +363,7 @@ func CategoryLabel(category string) string {
 }
 
 func inferCategory(host string) string {
-	h := normalizeHost(host)
+	h := NormalizeHost(host)
 	if c, ok := seedHostToCategory[h]; ok {
 		return c
 	}

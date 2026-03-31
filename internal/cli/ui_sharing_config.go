@@ -14,6 +14,7 @@ import (
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
+	"tunnelbypass/tools/host_catalog"
 
 	"gopkg.in/yaml.v3"
 )
@@ -142,9 +143,13 @@ func addNewSNI(reader *bufio.Reader) {
 }
 
 func addNewSNIForService(reader *bufio.Reader, sName string) {
-	newSni := prompt(reader, "New tunnel hostname (SNI): ")
+	raw := strings.TrimSpace(prompt(reader, "New tunnel hostname (SNI, URL ok): "))
+	newSni := host_catalog.NormalizeHost(raw)
 	if newSni == "" {
 		return
+	}
+	if raw != newSni && (strings.Contains(raw, "://") || strings.Contains(raw, "/")) {
+		fmt.Printf("    %s→ %s%s\n", ColorGray, newSni, ColorReset)
 	}
 
 	if strings.Contains(sName, "WireGuard") || strings.Contains(sName, "SSH") || strings.Contains(sName, "SSL") {

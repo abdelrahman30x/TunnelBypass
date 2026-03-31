@@ -46,7 +46,7 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	_ = installer.EnsureSelfSignedCert(certPath, keyPath, clientSNI)
 
 	serverConfig := map[string]interface{}{
-		"listen":   fmt.Sprintf(":%d", opt.Port),
+		"listen":   fmt.Sprintf("0.0.0.0:%d", opt.Port),
 		"protocol": "udp",
 		"tls": map[string]interface{}{
 			"cert": certPath,
@@ -161,14 +161,27 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 		}
 	}
 
-	srvData, _ := yaml.Marshal(serverConfig)
-	cliData, _ := yaml.Marshal(clientConfig)
+	srvData, err := yaml.Marshal(serverConfig)
+	if err != nil {
+		return "", "", err
+	}
+	cliData, err := yaml.Marshal(clientConfig)
+	if err != nil {
+		return "", "", err
+	}
 
 	srvPath := filepath.Join(configsDir, "server.yaml")
 	cliPath := filepath.Join(configsDir, "client.yaml")
 
-	_ = os.WriteFile(srvPath, srvData, 0644)
-	_ = os.WriteFile(cliPath, cliData, 0644)
+	if err := os.WriteFile(srvPath, srvData, 0644); err != nil {
+		return "", "", err
+	}
+	if err := os.WriteFile(cliPath, cliData, 0644); err != nil {
+		return "", "", err
+	}
+	if err := EnsureServerYAML(srvPath); err != nil {
+		return "", "", err
+	}
 
 	return srvPath, cliPath, nil
 }

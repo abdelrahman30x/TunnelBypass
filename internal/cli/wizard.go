@@ -316,18 +316,32 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		for i, c := range categories {
 			fmt.Printf("    %s%2d)%s %s%s%s\n", ColorCyan, i+1, ColorReset, ColorGreen, host_catalog.CategoryLabel(c), ColorReset)
 		}
-		catChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sCategory choice [1-%d]: %s", ColorBold, len(categories), ColorReset))))
-		selectedCategory := "custom"
-		if len(categories) > 0 {
-			selectedCategory = categories[0]
-		}
-		if catChoice != "" {
+		var selectedCategory string
+		var explicitCategory bool
+		for {
+			catChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sCategory choice [1-%d]: %s", ColorBold, len(categories), ColorReset))))
+			if len(categories) == 0 {
+				selectedCategory = "custom"
+				explicitCategory = true
+				break
+			}
+			if catChoice == "" {
+				selectedCategory = categories[0]
+				explicitCategory = false
+				break
+			}
 			if idx, err := strconv.Atoi(catChoice); err == nil && idx >= 1 && idx <= len(categories) {
 				selectedCategory = categories[idx-1]
+				explicitCategory = true
+				break
 			}
+			fmt.Printf("    %s[!] Enter a number from 1 to %d, or press Enter for category 1 (%s).%s\n",
+				ColorYellow, len(categories), host_catalog.CategoryLabel(categories[0]), ColorReset)
 		}
 		hosts := host_catalog.HostsByCategory(selectedCategory)
-		if len(hosts) == 0 && len(categories) > 0 {
+		// If the user did not pick a category explicitly, fall back to the first category that has hosts (legacy behavior).
+		// If they explicitly chose a category (e.g. Custom / Other) with no preset hosts, keep it — do not switch to Gaming.
+		if len(hosts) == 0 && len(categories) > 0 && !explicitCategory {
 			for _, cat := range categories {
 				if h := host_catalog.HostsByCategory(cat); len(h) > 0 {
 					hosts = h
@@ -343,16 +357,44 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		fmt.Printf("    %sc)%s %sCustom host%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 		fmt.Printf("    %sn)%s %sSkip (no host from list)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 
-		sniChoice := prompt(reader, fmt.Sprintf("\n    %sChoice: %s", ColorBold, ColorReset))
-		if strings.ToLower(sniChoice) == "c" {
-			sni = prompt(reader, fmt.Sprintf("    %sCustom hostname: %s", ColorBold, ColorReset))
-		} else if strings.ToLower(sniChoice) == "n" || sniChoice == "" {
-			sni = ""
-		} else {
-			idx, _ := strconv.Atoi(sniChoice)
-			if idx > 0 && idx <= len(hosts) {
-				sni = hosts[idx-1]
+		for {
+			sniChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice: %s", ColorBold, ColorReset))))
+			switch {
+			case sniChoice == "c":
+				for {
+					raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("    %sCustom hostname (URL or domain): %s", ColorBold, ColorReset)))
+					if raw == "" {
+						fmt.Printf("    %s[!] Enter a hostname or paste a full URL; we strip https:// and paths.%s\n", ColorYellow, ColorReset)
+						continue
+					}
+					sni = host_catalog.NormalizeHost(raw)
+					if sni == "" {
+						fmt.Printf("    %s[!] Could not parse a hostname from that input.%s\n", ColorYellow, ColorReset)
+						continue
+					}
+					if raw != sni && (strings.Contains(raw, "://") || strings.Contains(raw, "/")) {
+						fmt.Printf("    %s→ %s%s\n", ColorGray, sni, ColorReset)
+					}
+					break
+				}
+			case sniChoice == "n" || sniChoice == "":
+				sni = ""
+			default:
+				idx, err := strconv.Atoi(sniChoice)
+				if err == nil && idx >= 1 && idx <= len(hosts) {
+					sni = hosts[idx-1]
+				} else {
+					if len(hosts) == 0 {
+						fmt.Printf("    %s[!] No preset hosts for this category. Type %sc%s (custom) or %sn%s (skip).%s\n",
+							ColorYellow, ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
+						continue
+					}
+					fmt.Printf("    %s[!] Enter 1-%d, %sc%s (custom), or %sn%s (skip).%s\n",
+						ColorYellow, len(hosts), ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
+					continue
+				}
 			}
+			break
 		}
 	}
 

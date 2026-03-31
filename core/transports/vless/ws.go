@@ -100,6 +100,7 @@ func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 					"sockopt": map[string]interface{}{
 						"tcpNoDelay":  true,
 						"tcpFastOpen": true,
+						"v6only":      false,
 					},
 				},
 				"sniffing": map[string]interface{}{
@@ -146,7 +147,13 @@ func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 		return "", err
 	}
 	targetPath := filepath.Join(cfgDir, "server.json")
-	return targetPath, os.WriteFile(targetPath, data, 0644)
+	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+		return "", err
+	}
+	if err := EnsureInboundListenIPv4(targetPath); err != nil {
+		return "", err
+	}
+	return targetPath, nil
 }
 
 // GenerateVlessWSClientConfig writes Xray client JSON for VLESS + WS + TLS.

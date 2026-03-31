@@ -2,14 +2,9 @@ package hysteria
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"tunnelbypass/core/installer"
-
-	"gopkg.in/yaml.v3"
-
-	"tunnelbypass/internal/utils"
 )
 
 // InstallHysteriaService registers hysteria with the TunnelBypass service wrapper.
@@ -20,7 +15,9 @@ func InstallHysteriaService(serviceName, configPath string, port int) error {
 	}
 
 	absConfig, _ := filepath.Abs(configPath)
-	_ = sanitizeObfsInServerConfig(absConfig)
+	if err := EnsureServerYAML(absConfig); err != nil {
+		return fmt.Errorf("hysteria server config: %w", err)
+	}
 
 	if err := installer.CreateService(
 		serviceName,
@@ -32,45 +29,14 @@ func InstallHysteriaService(serviceName, configPath string, port int) error {
 		return fmt.Errorf("failed to create hysteria service: %v", err)
 	}
 
+	_ = installer.ApplyLinuxTransitNetworking()
+
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "udp", serviceName)
+		installer.PrintCloudProviderFirewallHint(port, "udp")
 	}
 
 	return nil
-}
-
-// sanitizeObfsInServerConfig fixes legacy/invalid obfs blocks that crash Hysteria v2.
-func sanitizeObfsInServerConfig(configPath string) error {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
-	}
-	data = utils.StripUTF8BOM(data)
-	var root map[string]interface{}
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return err
-	}
-	obfs, ok := root["obfs"].(map[string]interface{})
-	if !ok {
-		return nil
-	}
-	if t, _ := obfs["type"].(string); t != "salamander" {
-		return nil
-	}
-	salamander, ok := obfs["salamander"].(map[string]interface{})
-	if !ok {
-		delete(root, "obfs")
-	} else {
-		psk, _ := salamander["password"].(string)
-		if len(psk) < 4 {
-			delete(root, "obfs")
-		}
-	}
-	out, err := yaml.Marshal(root)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(configPath, out, 0644)
 }
 
 func UninstallHysteriaService(serviceName string) error {

@@ -14,7 +14,8 @@ import (
 // ── Firewall ──────────────────────────────────────────────────────────────────
 
 // OpenFirewallPort adds an inbound firewall rule for the given port/protocol.
-// On Windows it uses netsh; on Linux it tries ufw, firewalld, then iptables.
+// On Windows it uses netsh. On Linux: firewalld (firewall-cmd) if running, else ufw when
+// active, else idempotent iptables+ip6tables INPUT (nftables backend is common; do not mix with active firewalld).
 // Without admin/root, prints a hint and returns nil (no-op).
 func OpenFirewallPort(port int, protocol, name string) error {
 	if port <= 0 {
@@ -47,28 +48,32 @@ func OpenFirewallPort(port int, protocol, name string) error {
 	}
 
 	fmt.Printf("[*] Opening firewall rule '%s' port %d (%s)...\n", ruleName, port, protocol)
-	ufwActive := false
+
+	// 1) firewalld (Fedora/RHEL/CentOS) — avoid mixing raw iptables with running firewalld.
+	if firewallCmdRunning() {
+		_ = exec.Command("firewall-cmd", "--permanent", "--add-port="+portStr+"/"+protocol).Run()
+		_ = exec.Command("firewall-cmd", "--reload").Run()
+		fmt.Printf("[*] Opened port %s/%s via firewalld (firewall-cmd).\n", portStr, protocol)
+		return nil
+	}
+
+	// 2) UFW when active (Ubuntu/Debian) — ufw manages netfilter; do not duplicate with iptables.
+	if ufwIsActive() {
+		_ = exec.Command("ufw", "allow", fmt.Sprintf("%d/%s", port, protocol)).Run()
+		fmt.Printf("[*] Opened port %s/%s via ufw (active).\n", portStr, protocol)
+		return nil
+	}
+
+	// UFW installed but inactive: pre-create rule for a later `ufw enable`.
 	if _, err := exec.LookPath("ufw"); err == nil {
-		out, _ := exec.Command("ufw", "status").CombinedOutput()
-		ufwActive = strings.Contains(string(out), "Status: active")
-		// Pre-create rule if user later enables ufw
 		_ = exec.Command("ufw", "allow", fmt.Sprintf("%d/%s", port, protocol)).Run()
 	}
-	firewalldRunning := false
-	if _, err := exec.LookPath("firewall-cmd"); err == nil {
-		if err := exec.Command("firewall-cmd", "--state").Run(); err == nil {
-			firewalldRunning = true
-			_ = exec.Command("firewall-cmd", "--permanent", "--add-port="+portStr+"/"+protocol).Run()
-			_ = exec.Command("firewall-cmd", "--reload").Run()
-		}
-	}
-	// When ufw is installed but inactive (common on VPS), ufw rules do nothing — add iptables INPUT.
+
+	// 3) Fallback: iptables + ip6tables (often nft backend on modern distros); idempotent INPUT allow.
 	if _, err := exec.LookPath("iptables"); err == nil {
-		if !ufwActive && !firewalldRunning {
-			_ = exec.Command("iptables", "-I", "INPUT", "1", "-p", protocol, "--dport", portStr, "-j", "ACCEPT").Run()
-			fmt.Printf("[*] Inbound %s/%s allowed via iptables (ufw/firewalld not active on this host).\n", portStr, protocol)
-		}
-	} else if runtime.GOOS == "linux" && !ufwActive && !firewalldRunning {
+		addIptablesInputAllow(protocol, portStr)
+		fmt.Printf("[*] Inbound %s/%s allowed via iptables/ip6tables (no active firewalld/ufw).\n", portStr, protocol)
+	} else if runtime.GOOS == "linux" {
 		fmt.Fprintf(os.Stderr, "[!] No iptables: could not add direct INPUT allow for %d/%s (install iptables or enable ufw/firewalld).\n", port, protocol)
 	}
 	return nil
@@ -103,19 +108,16 @@ func CloseFirewallPort(port int, protocol, name string) error {
 		return nil
 	}
 
-	if _, err := exec.LookPath("ufw"); err == nil {
-		_ = exec.Command("ufw", "deny", fmt.Sprintf("%d/%s", port, protocol)).Run()
-		return nil
-	}
-	if _, err := exec.LookPath("firewall-cmd"); err == nil {
+	if firewallCmdRunning() {
 		_ = exec.Command("firewall-cmd", "--permanent", "--remove-port="+portStr+"/"+protocol).Run()
 		_ = exec.Command("firewall-cmd", "--reload").Run()
 		return nil
 	}
-	if _, err := exec.LookPath("iptables"); err == nil {
-		_ = exec.Command("iptables", "-D", "INPUT", "-p", protocol, "--dport", portStr, "-j", "ACCEPT").Run()
+	if ufwIsActive() {
+		_ = exec.Command("ufw", "deny", fmt.Sprintf("%d/%s", port, protocol)).Run()
 		return nil
 	}
+	removeIptablesInputAllow(protocol, portStr)
 	return nil
 }
 

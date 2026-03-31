@@ -147,8 +147,11 @@ func installWireGuardLinux(serviceName, configPath string, port int) error {
 		_ = writeLinuxWGState(linuxWGState{Mode: "wg-quick", TunnelName: tunnelName})
 	}
 
+	_ = installer.ApplyLinuxTransitNetworking()
+
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "udp", serviceName)
+		installer.PrintCloudProviderFirewallHint(port, "udp")
 	}
 	return nil
 }

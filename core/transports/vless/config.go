@@ -95,6 +95,7 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 						"tcpNoDelay":  true,
 						"tcpFastOpen": true,
 						"mark":        0,
+						"v6only":      false,
 					},
 				},
 				"sniffing": map[string]interface{}{
@@ -176,8 +177,13 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 
 	fileName := "server.json"
 	targetPath := filepath.Join(configsDir, fileName)
-	err = os.WriteFile(targetPath, data, 0644)
-	return targetPath, err
+	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+		return "", err
+	}
+	if err := EnsureInboundListenIPv4(targetPath); err != nil {
+		return "", err
+	}
+	return targetPath, nil
 }
 
 // Xray client config JSON (Reality / grpc / tcp) under configs/vless.

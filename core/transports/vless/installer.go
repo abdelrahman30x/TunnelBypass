@@ -14,6 +14,9 @@ func InstallXrayService(serviceName, configPath string, port int) error {
 	}
 
 	absConfig, _ := filepath.Abs(configPath)
+	if err := EnsureInboundListenIPv4(absConfig); err != nil {
+		return fmt.Errorf("xray config listen (IPv4): %w", err)
+	}
 
 	if err := installer.CreateService(
 		serviceName,
@@ -25,8 +28,11 @@ func InstallXrayService(serviceName, configPath string, port int) error {
 		return fmt.Errorf("failed to create xray service: %v", err)
 	}
 
+	_ = installer.ApplyLinuxTransitNetworking()
+
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "tcp", serviceName)
+		installer.PrintCloudProviderFirewallHint(port, "tcp")
 	}
 
 	return nil
