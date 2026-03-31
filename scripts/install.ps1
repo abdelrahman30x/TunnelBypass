@@ -92,7 +92,14 @@ Copy-Item -Path $tmp -Destination $dest -Force
 Remove-Item -Force $tmp
 
 Write-Host "[+] Installed: $dest"
-Write-Host "    Run: .\tunnelbypass.exe --version"
+try {
+    $version = & $dest --version 2>$null
+    if ($version) {
+        Write-Host "    Version: $version"
+    }
+} catch {
+}
+Write-Host "    Run: tunnelbypass.exe"
 $inPath = $false
 foreach ($p in ($env:Path -split ';')) {
     if ($p -and (Test-Path $p) -and ((Resolve-Path $InstallDir).Path -eq (Resolve-Path $p).Path)) { $inPath = $true; break }

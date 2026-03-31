@@ -154,6 +154,7 @@ if [[ -n "$PREFIX" ]]; then
   cp -f "$BIN" "${PREFIX}/tunnelbypass"
   chmod 0755 "${PREFIX}/tunnelbypass"
   say "[+] Installed: ${PREFIX}/tunnelbypass"
+  INSTALLED_BIN="${PREFIX}/tunnelbypass"
   case ":$PATH:" in
     *":$PREFIX:"*) ;;
     *) say "[!] Add to PATH, e.g.: export PATH=\"$PREFIX:\$PATH\"" ;;
@@ -163,5 +164,12 @@ else
   cp -f "$BIN" "$OUT"
   chmod +x "$OUT"
   say "[+] Binary ready: $OUT"
-  say "    Run: ./tunnelbypass --version"
+  INSTALLED_BIN="$OUT"
 fi
+
+VERSION="$("$INSTALLED_BIN" --version 2>/dev/null || true)"
+if [[ -n "$VERSION" ]]; then
+  say "    Version: $VERSION"
+fi
+
+say "    Run: ./tunnelbypass"

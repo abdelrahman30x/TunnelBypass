@@ -26,14 +26,35 @@ func CheckPortOpen(host string, port string, timeout time.Duration) bool {
 	return false
 }
 
-// First public IP from HTTPS endpoints (parallel, short timeout).
+// publicIPv4HTTPClient uses IPv4-only outbound TCP so lookup services return the server's IPv4 address.
+func publicIPv4HTTPClient() *http.Client {
+	var tr *http.Transport
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		tr = t.Clone()
+	} else {
+		tr = &http.Transport{Proxy: http.ProxyFromEnvironment}
+	}
+	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		return d.DialContext(ctx, "tcp4", addr)
+	}
+	return &http.Client{Transport: tr}
+}
+
+// GetPublicIP returns the server's public IPv4 address from HTTPS endpoints (parallel, short timeout).
+// IPv6 is intentionally skipped so client URIs and all tunnel protocols stay in host:port form without brackets.
 func GetPublicIP() string {
+	// IPv4-specific and generic URLs; connection is forced to tcp4 so generic services still see IPv4.
 	providers := []string{
+		"https://v4.ident.me",
+		"https://ipv4.icanhazip.com",
 		"https://api.ipify.org",
 		"https://ifconfig.me/ip",
 		"https://icanhazip.com",
 		"https://ident.me",
-		"https://v4.ident.me",
 	}
 
 	type result struct {
@@ -45,7 +66,7 @@ func GetPublicIP() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
-	client := &http.Client{}
+	client := publicIPv4HTTPClient()
 
 	for _, url := range providers {
 		go func(u string) {
@@ -68,10 +89,11 @@ func GetPublicIP() string {
 			}
 
 			ip := strings.TrimSpace(string(body))
-			if net.ParseIP(ip) != nil {
-				resChan <- result{ip, nil}
+			parsed := net.ParseIP(ip)
+			if parsed != nil && parsed.To4() != nil {
+				resChan <- result{parsed.String(), nil}
 			} else {
-				resChan <- result{"", fmt.Errorf("invalid IP: %s", ip)}
+				resChan <- result{"", fmt.Errorf("not a public IPv4: %s", ip)}
 			}
 		}(url)
 	}
