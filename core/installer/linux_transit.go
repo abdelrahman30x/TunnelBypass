@@ -2,11 +2,14 @@ package installer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const (
@@ -20,10 +23,9 @@ net.ipv4.tcp_congestion_control=bbr
 `
 )
 
-// ApplyLinuxTransitNetworking configures sysctl (forwarding, BBR, fq), prepends
-// Google DNS to /etc/resolv.conf when missing, and adds transit-only iptables rules
-// (mangle MSS clamp, NAT masquerade, FORWARD accept). It never flushes chains,
-// never changes default policies, and never touches the INPUT chain.
+// ApplyLinuxTransitNetworking configures sysctl (forwarding, BBR, fq), DNS (systemd-resolved /
+// resolvectl or resolv.conf fallback), OUTPUT policy ACCEPT, and transit iptables/ip6tables
+// (mangle MSS, NAT masquerade, FORWARD accept). It never flushes chains and never touches INPUT.
 //
 // Requires root on Linux; otherwise it is a no-op. Idempotent: safe to run on every install.
 // Called after VLESS/Xray, Hysteria v2, and WireGuard (Linux) service setup — before inbound firewall opens.
@@ -42,8 +44,13 @@ func ApplyLinuxTransitNetworking() error {
 		fmt.Fprintf(os.Stderr, "[!] Linux transit sysctl: %v\n", err)
 	}
 
-	if err := ensureResolvGoogleDNS(); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Linux transit resolv.conf: %v\n", err)
+	// Allow outbound HTTPS/DNS for IP detection and resolvectl (before DNS healing).
+	if err := ensureOutputPolicyAccept(); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Linux transit OUTPUT policy: %v\n", err)
+	}
+
+	if err := ensureDNSLinuxTransit(); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Linux transit DNS: %v\n", err)
 	}
 
 	if err := ensureIptablesTransit(); err != nil {
@@ -83,58 +90,116 @@ func ensureLinuxTransitSysctl() error {
 	return nil
 }
 
-func ensureResolvGoogleDNS() error {
-	const path = "/etc/resolv.conf"
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	if strings.Contains(string(data), "8.8.8.8") {
-		return nil
-	}
-	// Prefer systemd-resolved API when available (avoids breaking resolv.conf symlinks).
-	if tryResolvectlDNS() {
-		return nil
-	}
-	fi, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if fi.Mode()&os.ModeSymlink != 0 {
-		fmt.Fprintf(os.Stderr, "[!] Skipped editing /etc/resolv.conf (symlink). Try: resolvectl dns <iface> 8.8.8.8 or configure systemd-resolved.\n")
-		return nil
-	}
-	newData := append([]byte("nameserver 8.8.8.8\n"), data...)
-	if err := os.WriteFile(path, newData, fi.Mode().Perm()); err != nil {
-		return err
-	}
-	fmt.Printf("[*] Prepended nameserver 8.8.8.8 to /etc/resolv.conf.\n")
-	return nil
+// dnsResolutionHealthy is true when a normal hostname lookup succeeds (skip DNS surgery if OK).
+func dnsResolutionHealthy() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	_, err := net.DefaultResolver.LookupHost(ctx, "example.com")
+	return err == nil
 }
 
-// tryResolvectlDNS sets 8.8.8.8 on the default IPv4 interface via resolvectl when possible.
-func tryResolvectlDNS() bool {
+func ensureSystemdResolved() {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return
+	}
+	// Best-effort: Ubuntu/Debian use systemd-resolved for resolvectl.
+	_ = exec.Command("systemctl", "enable", "--now", "systemd-resolved.service").Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+}
+
+// ensureDNSLinuxTransit configures DNS via systemd-resolved when needed; avoids edits if lookups already work.
+func ensureDNSLinuxTransit() error {
+	if dnsResolutionHealthy() {
+		return nil
+	}
+
+	ensureSystemdResolved()
+
+	iface := defaultIPv4Interface()
+	if iface == "" {
+		// Still try legacy file path
+		return legacyResolvFallback()
+	}
+
+	if tryResolvectlDNSFull(iface) {
+		time.Sleep(2 * time.Second)
+		return nil
+	}
+
+	return legacyResolvFallback()
+}
+
+// tryResolvectlDNSFull sets DNS + search domain on the interface (systemd-resolved runtime).
+func tryResolvectlDNSFull(iface string) bool {
 	if _, err := exec.LookPath("resolvectl"); err != nil {
 		return false
 	}
-	iface := defaultIPv4Interface()
-	if iface == "" {
-		return false
-	}
-	cmd := exec.Command("resolvectl", "dns", iface, "8.8.8.8")
+	cmd := exec.Command("resolvectl", "dns", iface, "8.8.8.8", "1.1.1.1")
 	if err := cmd.Run(); err != nil {
 		return false
 	}
-	fmt.Printf("[*] Set DNS 8.8.8.8 on interface %s via resolvectl (systemd-resolved).\n", iface)
+	_ = exec.Command("resolvectl", "domain", iface, "~.").Run()
+	fmt.Printf("[*] resolvectl dns %s 8.8.8.8 1.1.1.1 (systemd-resolved).\n", iface)
 	return true
 }
 
 func defaultIPv4Interface() string {
-	out, err := exec.Command("sh", "-c", "ip -4 route show default 2>/dev/null | awk '{print $5}' | head -1").Output()
+	// Match: ip route | grep default | awk '{print $5}' (IPv4 default route dev)
+	out, err := exec.Command("sh", "-c", "ip route 2>/dev/null | grep default | awk '{print $5}' | head -1").Output()
+	if err == nil {
+		if iface := strings.TrimSpace(string(out)); iface != "" {
+			return iface
+		}
+	}
+	out, err = exec.Command("sh", "-c", "ip -4 route show default 2>/dev/null | awk '{print $5}' | head -1").Output()
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func legacyResolvFallback() error {
+	const path = "/etc/resolv.conf"
+	body := "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+				return err
+			}
+			fmt.Printf("[*] Created %s with nameservers 8.8.8.8, 1.1.1.1.\n", path)
+			return nil
+		}
+		return nil
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		fmt.Fprintf(os.Stderr, "[!] Skipped writing /etc/resolv.conf (symlink); use resolvectl or configure systemd-resolved.\n")
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(body), fi.Mode().Perm()); err != nil {
+		return err
+	}
+	fmt.Printf("[*] Wrote static resolv.conf with nameservers 8.8.8.8, 1.1.1.1.\n")
+	return nil
+}
+
+// ensureOutputPolicyAccept sets filter OUTPUT default to ACCEPT so outbound HTTPS/DNS for IP detection is not blocked.
+func ensureOutputPolicyAccept() error {
+	if _, err := exec.LookPath("iptables"); err != nil {
+		return nil
+	}
+	if err := exec.Command("iptables", "-P", "OUTPUT", "ACCEPT").Run(); err != nil {
+		return err
+	}
+	fmt.Printf("[*] iptables: OUTPUT policy ACCEPT\n")
+	if _, err := exec.LookPath("ip6tables"); err != nil {
+		return nil
+	}
+	if err := exec.Command("ip6tables", "-P", "OUTPUT", "ACCEPT").Run(); err != nil {
+		return fmt.Errorf("ip6tables OUTPUT: %w", err)
+	}
+	fmt.Printf("[*] ip6tables: OUTPUT policy ACCEPT\n")
+	return nil
 }
 
 func warnSELinuxIfEnforcing() {

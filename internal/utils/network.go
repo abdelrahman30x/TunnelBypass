@@ -44,18 +44,39 @@ func publicIPv4HTTPClient() *http.Client {
 	return &http.Client{Transport: tr}
 }
 
+// publicIPv4ProviderURLs are HTTPS endpoints returning the caller's IPv4 as plain text (tcp4 dial).
+var publicIPv4ProviderURLs = []string{
+	"https://v4.ident.me",
+	"https://ipv4.icanhazip.com",
+	"https://api.ipify.org",
+	"https://ifconfig.me/ip",
+	"https://icanhazip.com",
+	"https://ident.me",
+}
+
+func dnsLookupHealthy() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	_, err := net.DefaultResolver.LookupHost(ctx, "example.com")
+	return err == nil
+}
+
 // GetPublicIP returns the server's public IPv4 address from HTTPS endpoints (parallel, short timeout).
+// If DNS is initially broken, waits 2s (e.g. after resolvectl); retries once after another 2s on total failure.
 // IPv6 is intentionally skipped so client URIs and all tunnel protocols stay in host:port form without brackets.
 func GetPublicIP() string {
-	// IPv4-specific and generic URLs; connection is forced to tcp4 so generic services still see IPv4.
-	providers := []string{
-		"https://v4.ident.me",
-		"https://ipv4.icanhazip.com",
-		"https://api.ipify.org",
-		"https://ifconfig.me/ip",
-		"https://icanhazip.com",
-		"https://ident.me",
+	if !dnsLookupHealthy() {
+		time.Sleep(2 * time.Second)
 	}
+	if ip := fetchPublicIPv4FromProviders(); ip != "" {
+		return ip
+	}
+	time.Sleep(2 * time.Second)
+	return fetchPublicIPv4FromProviders()
+}
+
+func fetchPublicIPv4FromProviders() string {
+	providers := publicIPv4ProviderURLs
 
 	type result struct {
 		ip  string
@@ -98,11 +119,10 @@ func GetPublicIP() string {
 		}(url)
 	}
 
-	// Wait for the first success or all failures; cancel cancels remaining goroutines.
 	for i := 0; i < len(providers); i++ {
 		res := <-resChan
 		if res.err == nil && res.ip != "" {
-			cancel() // abort remaining in-flight requests
+			cancel()
 			return res.ip
 		}
 	}
