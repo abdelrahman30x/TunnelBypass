@@ -140,6 +140,10 @@ func NormalizeTransport(t string) string {
 		return "reality"
 	case "vless-ws", "vlessws", "xray-wss", "xraywss":
 		return "vless-ws"
+	case "vless-grpc", "grpc", "grpc-tls":
+		return "vless-grpc"
+	case "ssh-tls", "ssh-tls-direct", "vless-tls-ssh":
+		return "ssh-tls"
 	case "wss", "wstunnel":
 		return "wss"
 	case "tls", "stunnel":
@@ -204,8 +208,10 @@ func FillDefaults(s *RunSpec) {
 	}
 	if s.Port == 0 {
 		switch s.Transport {
-		case "reality", "wss", "tls", "vless-ws":
+		case "reality", "wss", "tls", "vless-ws", "vless-grpc":
 			s.Port = 443
+		case "ssh-tls":
+			s.Port = 2053
 		case "hysteria":
 			s.Port = 8443
 		case "wireguard":
@@ -218,7 +224,7 @@ func FillDefaults(s *RunSpec) {
 	}
 	if s.SSH.Port == 0 {
 		switch s.Transport {
-		case "wss", "tls", "ssh":
+		case "wss", "tls", "ssh", "ssh-tls":
 			// Use dynamic port allocation for SSH backend (0 triggers auto-assignment)
 			s.SSH.Port = 0
 		default:
@@ -227,6 +233,9 @@ func FillDefaults(s *RunSpec) {
 	}
 	if s.UDPGW.Port == 0 {
 		s.UDPGW.Port = 7300
+	}
+	if s.Transport == "ssh-tls" {
+		s.UDPGW.Enabled = true
 	}
 	if !s.Behavior.AutoStart {
 		s.Behavior.AutoStart = true
@@ -243,6 +252,12 @@ func Validate(s RunSpec) error {
 	}
 	if _, err := portable.Get(RunnerTransportFor(s.Transport)); err != nil {
 		return fmt.Errorf("unknown transport %q", s.Transport)
+	}
+	if NormalizeTransport(s.Transport) == "ssh-tls" && strings.TrimSpace(s.SNI) == "" {
+		return fmt.Errorf("ssh-tls requires a non-empty sni (tunnel hostname / SNI)")
+	}
+	if NormalizeTransport(s.Transport) == "vless-grpc" && strings.TrimSpace(s.SNI) == "" {
+		return fmt.Errorf("vless-grpc requires a non-empty sni (tunnel hostname / SNI)")
 	}
 	if s.Port < 0 || s.Port > 65535 {
 		return fmt.Errorf("invalid port %d", s.Port)

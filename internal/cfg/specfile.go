@@ -176,6 +176,10 @@ func ApplySpecDefaults(t string, f *SpecFile) {
 		if f.Port == 0 {
 			f.Port = 443
 		}
+	case "ssh-tls":
+		if f.Port == 0 {
+			f.Port = 2053
+		}
 	}
 	if f.UDPGWPort == 0 {
 		f.UDPGWPort = 7300
