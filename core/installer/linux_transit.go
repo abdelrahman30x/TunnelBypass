@@ -24,8 +24,8 @@ net.ipv4.tcp_congestion_control=bbr
 )
 
 // ApplyLinuxTransitNetworking configures sysctl (forwarding, BBR, fq), DNS (systemd-resolved /
-// resolvectl or resolv.conf fallback), OUTPUT policy ACCEPT, and transit iptables/ip6tables
-// (mangle MSS, NAT masquerade, FORWARD accept). It never flushes chains and never touches INPUT.
+// resolvectl or resolv.conf fallback), OUTPUT policy ACCEPT, idempotent INPUT ACCEPT on loopback,
+// and transit iptables/ip6tables (mangle MSS, NAT masquerade, FORWARD accept). It never flushes chains.
 //
 // Requires root on Linux; otherwise it is a no-op. Idempotent: safe to run on every install.
 // Called after VLESS/Xray, Hysteria v2, and WireGuard (Linux) service setup — before inbound firewall opens.
@@ -47,6 +47,11 @@ func ApplyLinuxTransitNetworking() error {
 	// Allow outbound HTTPS/DNS for IP detection and resolvectl (before DNS healing).
 	if err := ensureOutputPolicyAccept(); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] Linux transit OUTPUT policy: %v\n", err)
+	}
+
+	// Xray → loopback SSH (VLESS fallback): some hosts need explicit INPUT accept on lo.
+	if err := ensureLoopbackInputAccept(); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Linux transit loopback INPUT: %v\n", err)
 	}
 
 	if err := ensureDNSLinuxTransit(); err != nil {
@@ -199,6 +204,31 @@ func ensureOutputPolicyAccept() error {
 		return fmt.Errorf("ip6tables OUTPUT: %w", err)
 	}
 	fmt.Printf("[*] ip6tables: OUTPUT policy ACCEPT\n")
+	return nil
+}
+
+// ensureLoopbackInputAccept adds idempotent INPUT ACCEPT for loopback (helps Xray dokodemo-style fallback to 127.0.0.1).
+func ensureLoopbackInputAccept() error {
+	if _, err := exec.LookPath("iptables"); err != nil {
+		return nil
+	}
+	check := []string{"iptables", "-C", "INPUT", "-i", "lo", "-j", "ACCEPT"}
+	if exec.Command(check[0], check[1:]...).Run() == nil {
+		return nil
+	}
+	if err := exec.Command("iptables", "-I", "INPUT", "1", "-i", "lo", "-j", "ACCEPT").Run(); err != nil {
+		return err
+	}
+	fmt.Printf("[*] iptables: INPUT loopback (-i lo) ACCEPT\n")
+	if _, err := exec.LookPath("ip6tables"); err != nil {
+		return nil
+	}
+	check6 := []string{"ip6tables", "-C", "INPUT", "-i", "lo", "-j", "ACCEPT"}
+	if exec.Command(check6[0], check6[1:]...).Run() == nil {
+		return nil
+	}
+	_ = exec.Command("ip6tables", "-I", "INPUT", "1", "-i", "lo", "-j", "ACCEPT").Run()
+	fmt.Printf("[*] ip6tables: INPUT loopback (-i lo) ACCEPT\n")
 	return nil
 }
 

@@ -124,7 +124,32 @@ func serviceExecutable() string {
 	return exe
 }
 
+func uniqueDNSNames(primary string, extra []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	add(primary)
+	for _, e := range extra {
+		add(e)
+	}
+	return out
+}
+
+// EnsureSelfSignedCert writes a single-CN self-signed certificate (idempotent if files exist).
 func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
+	return EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName, nil)
+}
+
+// EnsureSelfSignedCertWithSAN writes a self-signed cert with DNS SANs (commonName plus extraDNS, deduped).
+// Idempotent if both certPath and keyPath already exist.
+func EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName string, extraDNS []string) error {
 	if _, err := os.Stat(certPath); err == nil {
 		if _, err2 := os.Stat(keyPath); err2 == nil {
 			return nil // both files exist
@@ -133,6 +158,7 @@ func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
 	if commonName == "" {
 		commonName = "localhost"
 	}
+	dns := uniqueDNSNames(commonName, extraDNS)
 	_ = os.MkdirAll(filepath.Dir(certPath), 0755)
 
 	openssl := EnsureOpenSSL()
@@ -140,15 +166,33 @@ func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
 		openssl, _ = exec.LookPath("openssl")
 	}
 	if openssl != "" {
-		cmd := exec.Command(
-			openssl,
-			"req", "-x509", "-newkey", "rsa:2048",
-			"-nodes",
-			"-keyout", keyPath,
-			"-out", certPath,
-			"-days", "365",
-			"-subj", "/CN="+commonName,
-		)
+		var cmd *exec.Cmd
+		if len(dns) <= 1 {
+			cmd = exec.Command(
+				openssl,
+				"req", "-x509", "-newkey", "rsa:2048",
+				"-nodes",
+				"-keyout", keyPath,
+				"-out", certPath,
+				"-days", "365",
+				"-subj", "/CN="+commonName,
+			)
+		} else {
+			sanParts := make([]string, 0, len(dns))
+			for _, d := range dns {
+				sanParts = append(sanParts, "DNS:"+d)
+			}
+			cmd = exec.Command(
+				openssl,
+				"req", "-x509", "-newkey", "rsa:2048",
+				"-nodes",
+				"-keyout", keyPath,
+				"-out", certPath,
+				"-days", "365",
+				"-subj", "/CN="+commonName,
+				"-addext", "subjectAltName="+strings.Join(sanParts, ","),
+			)
+		}
 		if err := cmd.Run(); err == nil {
 			if _, err1 := os.Stat(certPath); err1 == nil {
 				if _, err2 := os.Stat(keyPath); err2 == nil {
@@ -172,7 +216,7 @@ func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
 		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{commonName},
+		DNSNames:     dns,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
 	if err != nil {
