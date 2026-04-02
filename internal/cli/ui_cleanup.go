@@ -24,6 +24,8 @@ const (
 	transportSSH       installedTransport = "ssh"
 	transportSSL       installedTransport = "ssl"
 	transportWSS       installedTransport = "wss"
+	transportSSHTLS    installedTransport = "ssh-tls"
+	transportGRPC      installedTransport = "grpc"
 	transportUDPGW     installedTransport = "udpgw"
 	transportUnknown   installedTransport = "unknown"
 )
@@ -31,6 +33,10 @@ const (
 func detectInstalledTransport(serviceName string) installedTransport {
 	s := strings.ToLower(serviceName)
 	switch {
+	case strings.Contains(s, "ssh-tls"):
+		return transportSSHTLS
+	case strings.Contains(s, "grpc"):
+		return transportGRPC
 	case strings.Contains(s, "hysteria"):
 		return transportHysteria
 	case strings.Contains(s, "wg-quick"):
@@ -53,6 +59,9 @@ func detectInstalledTransport(serviceName string) installedTransport {
 		}
 		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf")); err == nil {
 			return transportWireGuard
+		}
+		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("ssh-tls"), "server.json")); err == nil {
+			return transportSSHTLS
 		}
 		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("vless"), "server.json")); err == nil {
 			return transportXray
@@ -117,6 +126,10 @@ func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
 		_ = os.RemoveAll(installer.GetConfigDir("stunnel"))
 	case transportWSS:
 		_ = os.RemoveAll(installer.GetConfigDir("wstunnel"))
+	case transportSSHTLS:
+		_ = os.RemoveAll(installer.GetConfigDir("ssh-tls"))
+	case transportGRPC:
+		_ = os.RemoveAll(installer.GetConfigDir("vless-grpc"))
 	case transportUDPGW:
 		// No config tree; logs cleaned below.
 	}

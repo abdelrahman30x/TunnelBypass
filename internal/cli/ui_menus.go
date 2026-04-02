@@ -25,6 +25,7 @@ func runToolsMenu(reader *bufio.Reader) {
 		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
 		fmt.Printf("  %s[1]%s  %sManage Tunnel Host Catalog%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		fmt.Printf("  %s[2]%s  %sCompletely Remove / Uninstall Service%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
+		fmt.Printf("  %s[3]%s  %sReality dest (TCP camouflage)%s  %s(hosts.json + prefs)%s\n", ColorBold+ColorWhite, ColorReset, ColorCyan, ColorReset, ColorGray, ColorReset)
 		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
 		fmt.Printf("  %s[B]%s  %sBack to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 
@@ -35,10 +36,100 @@ func runToolsMenu(reader *bufio.Reader) {
 			runHostCatalogMenu(reader)
 		case "2":
 			runManageServiceMenu(reader)
+		case "3":
+			runRealityDestMenu(reader)
 		case "b", "back":
 			return
 		default:
 			fmt.Printf("\n%sInvalid choice.%s\n", ColorRed, ColorReset)
+		}
+	}
+}
+
+func runRealityDestMenu(reader *bufio.Reader) {
+	for {
+		fmt.Printf("\n%s  ╔═════════════════════════════════════════╗%s\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ║%s      %s✦  REALITY DEST (TCP)  ✦%s       %s║%s\n", ColorTeal+ColorBold, ColorReset, ColorBold+ColorWhite, ColorReset, ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
+		fmt.Printf("  %sUsed as Xray REALITY %sdest%s and Hysteria default masquerade when no tunnel SNI is set.%s\n",
+			ColorGray, ColorBold, ColorGray, ColorReset)
+		fmt.Printf("  %sDefault TCP address:%s %s\n", ColorGray, ColorReset, host_catalog.DefaultRealityDestAddress())
+		pref := host_catalog.PreferredRealityDestHost()
+		fmt.Printf("  %sPreferred hostname:%s %s%s%s\n\n", ColorGray, ColorReset, ColorBold, pref, ColorReset)
+
+		list := host_catalog.EffectiveRealityDestHosts()
+		for i, h := range list {
+			tag := ""
+			if host_catalog.IsRealityDestExtraHost(h) {
+				tag = ColorGray + " (custom)" + ColorReset
+			}
+			mark := ""
+			if strings.EqualFold(h, pref) {
+				mark = ColorGray + "  ← preferred" + ColorReset
+			}
+			fmt.Printf("  %s[%d]%s  %s%s%s\n", ColorBold+ColorWhite, i+1, ColorReset, h, tag, mark)
+		}
+		if len(list) == 0 {
+			fmt.Printf("  %s(no dest hosts — check embedded hosts.json)%s\n", ColorYellow, ColorReset)
+		}
+		fmt.Printf("\n  %sEnter 1–%d%s to set preferred dest  %s|  new installs & empty %sreality_dest%s use this\n",
+			ColorGray, len(list), ColorReset, ColorGray, ColorBold, ColorReset)
+		fmt.Printf("  %s[A]%s  %sAdd custom hostname%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
+		fmt.Printf("  %s[C]%s  %sClear custom hosts only%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		fmt.Printf("  %s[P]%s  %sClear preferred (first in list)%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
+		fmt.Printf("  %s[B]%s  %sBack%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
+
+		choice := strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sChoice: %s", ColorBold+ColorYellow, ColorReset)))
+		lc := strings.ToLower(choice)
+
+		switch lc {
+		case "b", "back":
+			return
+		case "a":
+			raw := strings.TrimSpace(prompt(reader, "Custom hostname (SNI, URL ok): "))
+			h := host_catalog.NormalizeHost(raw)
+			if h == "" {
+				fmt.Printf("  %s[!] Invalid hostname.%s\n", ColorYellow, ColorReset)
+				continue
+			}
+			if err := host_catalog.AddRealityDestExtraHost(h); err != nil {
+				fmt.Printf("  %s✗ %v%s\n", ColorRed, err, ColorReset)
+				continue
+			}
+			fmt.Printf("  %s✓ Added %q to dest pool.%s\n", ColorGreen, h, ColorReset)
+			set := strings.ToLower(strings.TrimSpace(prompt(reader, "Set as preferred dest? [Y/n]: ")))
+			if set == "" || set == "y" || set == "yes" {
+				if err := host_catalog.SetPreferredRealityDestHost(h); err != nil {
+					fmt.Printf("  %s✗ %v%s\n", ColorRed, err, ColorReset)
+					continue
+				}
+				fmt.Printf("  %s✓ Preferred set to %s.%s\n", ColorGreen, h, ColorReset)
+			}
+		case "c":
+			if err := host_catalog.ClearExtraRealityDestHosts(); err != nil {
+				fmt.Printf("  %s✗ %v%s\n", ColorRed, err, ColorReset)
+				continue
+			}
+			fmt.Printf("  %s✓ Custom dest hosts cleared.%s\n", ColorGreen, ColorReset)
+		case "p":
+			if err := host_catalog.SetPreferredRealityDestHost(""); err != nil {
+				fmt.Printf("  %s✗ %v%s\n", ColorRed, err, ColorReset)
+				continue
+			}
+			fmt.Printf("  %s✓ Preferred cleared — default is first host in the list.%s\n", ColorGreen, ColorReset)
+		default:
+			if n, err := strconv.Atoi(lc); err == nil && n >= 1 && n <= len(list) {
+				h := list[n-1]
+				if err := host_catalog.SetPreferredRealityDestHost(h); err != nil {
+					fmt.Printf("  %s✗ %v%s\n", ColorRed, err, ColorReset)
+					continue
+				}
+				fmt.Printf("  %s✓ Preferred dest set to %s (%s:443).%s\n", ColorGreen, h, h, ColorReset)
+				fmt.Printf("  %sRe-run Setup or regenerate configs so existing tunnels pick up the new dest.%s\n", ColorGray, ColorReset)
+				continue
+			}
+			fmt.Printf("  %sInvalid choice.%s\n", ColorRed, ColorReset)
 		}
 	}
 }
@@ -106,7 +197,7 @@ func runHelpMenu(reader *bufio.Reader) {
 
 	fmt.Printf("\n%s1) Setup tunnel%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Printf("   %s- Main Menu -> 1%s %s(Setup/Reinstall Tunnel)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
-	fmt.Printf("   %s- Choose type%s: Reality / Hysteria / SSH / SSL (WireGuard temporarily disabled)\n", ColorCyan, ColorReset)
+	fmt.Printf("   %s- Choose type%s: Reality, gRPC, Hysteria, WSS Xray, SSH+TLS, …\n", ColorCyan, ColorReset)
 	fmt.Printf("   %s- App creates configs, installs service, and opens firewall rule.%s\n", ColorGray, ColorReset)
 
 	fmt.Printf("\n%s2) Import in client apps%s\n", ColorBold+ColorYellow, ColorReset)
@@ -184,7 +275,8 @@ func runManageServiceMenu(reader *bufio.Reader) {
 			} else if strings.Contains(sName, "WireGuard") {
 				_ = wireguard.InstallWireGuardService(sName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820)
 			} else {
-				_ = vless.InstallXrayService(sName, filepath.Join(installer.GetConfigDir("vless"), "server.json"), 443)
+				cfgPath, port := xrayServiceConfigPathAndPort(sName)
+				_ = vless.InstallXrayService(sName, cfgPath, port)
 			}
 		case "5":
 			sName := selectInstalledService(reader, findInstalledServices(), "Choose service to uninstall")
@@ -289,7 +381,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
 
 		switch tr {
-		case transportXray, transportHysteria:
+		case transportXray, transportHysteria, transportSSHTLS, transportGRPC:
 			fmt.Printf("  %s[4]%s  %sAdd tunnel hostname (SNI)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 			fmt.Printf("  %s[5]%s  %sShow sharing links%s\n", ColorBold+ColorWhite, ColorReset, ColorMagenta, ColorReset)
 		case transportWireGuard:
@@ -324,7 +416,8 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			} else {
 				_ = vless.UninstallXrayService(serviceName)
 				time.Sleep(1 * time.Second)
-				_ = vless.InstallXrayService(serviceName, filepath.Join(installer.GetConfigDir("vless"), "server.json"), 443)
+				cfgPath, port := xrayServiceConfigPathAndPort(serviceName)
+				_ = vless.InstallXrayService(serviceName, cfgPath, port)
 			}
 			fmt.Printf("    %s✓ Service Restarted.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
@@ -341,8 +434,8 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "4":
 			switch tr {
-			case transportXray, transportHysteria:
-				addNewSNI(reader)
+			case transportXray, transportHysteria, transportSSHTLS, transportGRPC:
+				addNewSNIForService(reader, serviceName)
 			case transportWireGuard:
 				displayWireGuardClientInfo()
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
@@ -354,7 +447,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			}
 		case "5":
-			if tr == transportXray || tr == transportHysteria {
+			if tr == transportXray || tr == transportHysteria || tr == transportSSHTLS || tr == transportGRPC {
 				displayTunnelSharingLinks(serviceName)
 			} else {
 				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
@@ -370,7 +463,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				_ = vless.UninstallXrayService(serviceName)
 			}
 			cleanupArtifactsForTransport(tr, serviceName)
-			if tr == transportSSH || tr == transportSSL || tr == transportWSS {
+			if tr == transportSSH || tr == transportSSL || tr == transportWSS || tr == transportSSHTLS {
 				maybeRemoveCompanionUDPGW(reader)
 			}
 			fmt.Printf("    %s✓ All files and services removed.%s\n", ColorGreen, ColorReset)
@@ -421,9 +514,17 @@ func showServiceStatus(name string) {
 		filepath.Join(base, "logs", name+".log"),
 	}
 	
-	if strings.Contains(name, "VLESS") || strings.Contains(name, "Reality") || strings.Contains(name, "Tunnel") {
+	if strings.Contains(name, "VLESS") || strings.Contains(name, "Reality") || strings.Contains(name, "Tunnel") || strings.Contains(name, "SSH-TLS") {
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_error.log"))
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_access.log"))
+	}
+	if strings.Contains(name, "SSH-TLS") {
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_ssh_tls_error.log"))
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_ssh_tls_access.log"))
+	}
+	if strings.Contains(name, "GRPC") {
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_grpc_error.log"))
+		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_grpc_access.log"))
 	}
 	
 	for _, logPath := range logCandidates {
@@ -439,5 +540,19 @@ func showServiceStatus(name string) {
 	if runtime.GOOS == "darwin" {
 		fmt.Printf("    %smacOS:%s Use Console.app or `log show --last 1h --style syslog` for system logs; TunnelBypass lines are in the files above.\n", ColorYellow, ColorReset)
 	}
+}
+
+// xrayServiceConfigPathAndPort resolves server.json and listen port for Reality / VLESS-WS / SSH-TLS Xray services.
+func xrayServiceConfigPathAndPort(serviceName string) (string, int) {
+	cfgPath := filepath.Join(installer.GetConfigDir("vless"), "server.json")
+	switch {
+	case strings.Contains(serviceName, "SSH-TLS"):
+		cfgPath = filepath.Join(installer.GetConfigDir("ssh-tls"), "server.json")
+	case strings.Contains(serviceName, "VLESS-WS"):
+		cfgPath = filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
+	case strings.Contains(serviceName, "GRPC"):
+		cfgPath = filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
+	}
+	return cfgPath, readInboundPortFromServerJSON(cfgPath, 443)
 }
 

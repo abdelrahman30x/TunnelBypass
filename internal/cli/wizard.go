@@ -136,6 +136,30 @@ func runWizard() {
 // menuSep40 is ASCII-only so classic Windows CMD and UTF-8 terminals both render a clean line.
 const menuSep40 = "----------------------------------------"
 
+// wizardMenuInternal maps printTunnelModeMenu() option [1]–[9] to the key consumed by
+// wizardChoiceToTransport. Index 0 is unused.
+// RECOMMENDED [1–3]: TCP Reality (strongest) → REALITY+gRPC (H2) → QUIC UDP.
+var wizardMenuInternal = []string{
+	"",   // [0] unused
+	"1",  // [1] reality (TCP / XTLS Vision — strongest overall vs typical DPI)
+	"10", // [2] vless-grpc (REALITY + gRPC / H2 — very strong vs L7 HTTP inspection)
+	"6",  // [3] hysteria (QUIC — strong when UDP allowed; different path than TCP)
+	"8",  // [4] vless-ws
+	"2",  // [5] wireguard
+	"9",  // [6] ssh-tls (strongest in SIMPLE)
+	"7",  // [7] wss
+	"4",  // [8] tls
+	"3",  // [9] ssh (weakest vs DPI)
+}
+
+func internalChoiceFromWizardMenu(menu string) string {
+	n, err := strconv.Atoi(strings.TrimSpace(menu))
+	if err != nil || n < 1 || n >= len(wizardMenuInternal) {
+		return ""
+	}
+	return wizardMenuInternal[n]
+}
+
 func stealthTag(level string) string {
 	switch level {
 	case "high":
@@ -154,35 +178,60 @@ func printTunnelModeMenu() {
 	fmt.Printf("%s  ╚═════════════════════════════════════════════════╝%s\n", ColorTeal+ColorBold, ColorReset)
 	fmt.Printf("  %sSelect tunnel mode  —  higher stealth = harder to block by DPI%s\n", ColorGray, ColorReset)
 
+	const menuSubW = 26
+	padMenuSub := func(s string) string {
+		if len(s) >= menuSubW {
+			return s
+		}
+		return s + strings.Repeat(" ", menuSubW-len(s))
+	}
+
+	menuIdx := ColorBold + ColorWhite
+
 	fmt.Printf("\n  %s★ RECOMMENDED%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
-	fmt.Printf("  %s[1]%s  %sReality%s      %s(VLESS + XTLS Vision)%s  Stealth: %s  %sTCP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorGreen, ColorReset,
-		ColorGray, ColorReset, stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("reality"))
-	fmt.Printf("  %s[2]%s  %sQUIC%s         %s(Hysteria v2)%s           Stealth: %s  %sUDP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorMagenta, ColorReset,
-		ColorGray, ColorReset, stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("hysteria"))
+	fmt.Printf("  %s[1]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorGreen, "Reality", ColorReset,
+		ColorGray, padMenuSub("(VLESS + XTLS Vision)"), ColorReset,
+		stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("reality"))
+	fmt.Printf("  %s[2]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP (h2)%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorCyan, "gRPC Stream", ColorReset,
+		ColorGray, padMenuSub("(REALITY+gRPC)"), ColorReset,
+		stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("vless-grpc"))
+	fmt.Printf("  %s[3]%s  %s%-14s%s%s%s%s  Stealth: %s  %sUDP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorMagenta, "QUIC", ColorReset,
+		ColorGray, padMenuSub("(Hysteria v2)"), ColorReset,
+		stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("hysteria"))
 
 	fmt.Printf("\n  %s◈ BALANCED%s\n", ColorBold+ColorCyan, ColorReset)
 	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
-	fmt.Printf("  %s[3]%s  %sWSS Xray%s     %s(WebSocket + TLS)%s       Stealth: %s  %sTCP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorCyan, ColorReset,
-		ColorGray, ColorReset, stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("vless-ws"))
-	fmt.Printf("  %s[4]%s  %sWireGuard%s    %s(VPN Tunnel)%s            Stealth: %s  %sUDP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorBlue, ColorReset,
-		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("wireguard"))
+	fmt.Printf("  %s[4]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorCyan, "WSS Xray", ColorReset,
+		ColorGray, padMenuSub("(WebSocket + TLS)"), ColorReset,
+		stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("vless-ws"))
+	fmt.Printf("  %s[5]%s  %s%-14s%s%s%s%s  Stealth: %s  %sUDP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorBlue, "WireGuard", ColorReset,
+		ColorGray, padMenuSub("(VPN Tunnel)"), ColorReset,
+		stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("wireguard"))
 
 	fmt.Printf("\n  %s◇ SIMPLE%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
-	fmt.Printf("  %s[5]%s  %sWSTunnel%s     %s(Raw over WebSocket)%s    Stealth: %s  %sTCP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorYellow, ColorReset,
-		ColorGray, ColorReset, stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("wss"))
-	fmt.Printf("  %s[6]%s  %sTLS%s          %s(stunnel)%s               Stealth: %s  %sTCP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorWhite, ColorReset,
-		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("tls"))
-	fmt.Printf("  %s[7]%s  %sSSH Tunnel%s   %s(legacy)%s                Stealth: %s  %sTCP%s%s\n",
-		ColorBold+ColorWhite, ColorReset, ColorBold+ColorWhite, ColorReset,
-		ColorGray, ColorReset, stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("ssh"))
+	fmt.Printf("  %s[6]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorGreen, "SSH + TLS", ColorReset,
+		ColorGray, padMenuSub("(Direct SNI)"), ColorReset,
+		stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("ssh-tls"))
+	fmt.Printf("  %s[7]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorYellow, "WSTunnel", ColorReset,
+		ColorGray, padMenuSub("(Raw over WebSocket)"), ColorReset,
+		stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("wss"))
+	fmt.Printf("  %s[8]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorWhite, "TLS", ColorReset,
+		ColorGray, padMenuSub("(stunnel)"), ColorReset,
+		stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("tls"))
+	fmt.Printf("  %s[9]%s  %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorWhite, "SSH Tunnel", ColorReset,
+		ColorGray, padMenuSub("(legacy)"), ColorReset,
+		stealthTag("low"), ColorGray, ColorReset, itemDisabledSuffix("ssh"))
 
 	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
 	fmt.Printf("  %s[B]%s  Back to Main Menu    %s[Q]%s  Exit\n",
@@ -247,6 +296,36 @@ func promptWSSInstallationScreen(reader *bufio.Reader) bool {
 	return false
 }
 
+// promptSSHTLSInstallationScreen explains SSH + TLS (Xray VLESS with TLS fallback to SSH) before install.
+func promptSSHTLSInstallationScreen(reader *bufio.Reader) bool {
+	titleSep := "========================================"
+	fmt.Printf("\n%s%s%s\n", ColorBold+ColorCyan, titleSep, ColorReset)
+	fmt.Printf("%sSSH + TLS (Direct SNI) — Xray + embedded SSH%s\n", ColorBold+ColorCyan, ColorReset)
+	fmt.Printf("%s%s%s\n\n", ColorBold+ColorCyan, titleSep, ColorReset)
+
+	fmt.Printf("%sSelected mode:%s VLESS + TCP + TLS on your listen port, with non-VLESS traffic forwarded to SSH (loopback).\n", ColorBold, ColorReset)
+	fmt.Printf("%sStealth:%s %s***%s (balanced — looks like TLS to a fixed SNI)\n\n", ColorBold, ColorReset, ColorYellow+ColorBold, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sWhat will be installed:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("%s1. Xray (VLESS inbound + TLS)%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* Self-signed TLS cert (OpenSSL when available); CN matches your SNI%s\n", ColorGray, ColorReset)
+	fmt.Printf("   %s* `fallbacks` send standard SSH-over-TLS to the embedded SSH listener%s\n\n", ColorGray, ColorReset)
+	fmt.Printf("%s2. Embedded SSH (same as other SSH-based modes)%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* Clients like Netmod / HTTP Custom use TLS to your port; no TunnelBypass app on the phone%s\n\n", ColorGray, ColorReset)
+	fmt.Printf("%s3. OS service%s\n", ColorBold, ColorReset)
+	fmt.Printf("   %s* %sTunnelBypass-SSH-TLS%s (Xray) plus SSH/UDPGW peers as needed%s\n\n", ColorGray, ColorCyan, ColorGray, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sNotes:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %s[!]%s You must set SNI to match the cert; accept self-signed or import the cert in the client if required.\n\n", ColorYellow+ColorBold, ColorReset)
+
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	ans := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sProceed with installation? (y/n): %s", ColorBold, ColorReset))))
+	fmt.Printf("%s%s%s\n", ColorBold+ColorCyan, titleSep, ColorReset)
+	return ans == "y" || ans == "yes"
+}
+
 func runSetupWizard(reader *bufio.Reader) bool {
 	baseDir := installer.GetBaseDir()
 	_ = os.MkdirAll(filepath.Join(baseDir, "configs"), 0755)
@@ -263,25 +342,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		os.Exit(0)
 	}
 
-	var internalChoice string
-	switch menuChoice {
-	case "1":
-		internalChoice = "1" // reality
-	case "2":
-		internalChoice = "6" // hysteria
-	case "3":
-		internalChoice = "8" // vless-ws (Xray)
-	case "4":
-		internalChoice = "2" // wireguard
-	case "5":
-		internalChoice = "7" // wss (wstunnel)
-	case "6":
-		internalChoice = "4" // tls
-	case "7":
-		internalChoice = "3" // ssh
-	default:
-		internalChoice = ""
-	}
+	internalChoice := internalChoiceFromWizardMenu(menuChoice)
 
 	transport := wizardChoiceToTransport(internalChoice)
 	if transport == "" {
@@ -290,7 +351,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	}
 	if cfg.IsDisabled(transport) {
 		fmt.Printf("\n%s[!] Protocol %q is temporarily disabled (known issues).%s\n", ColorRed, transport, ColorReset)
-		fmt.Printf("    %sChoose another option, e.g. Reality (1), QUIC (2), WSS Xray (3), or TLS (6).%s\n", ColorGray, ColorReset)
+		fmt.Printf("    %sChoose another option, e.g. Reality (1), gRPC (2), QUIC (3), WSS Xray (4), SSH + TLS (6), WSTunnel (7), TLS (8), or SSH (9).%s\n", ColorGray, ColorReset)
 		prompt(reader, fmt.Sprintf("\n%sPress Enter to return to selection...%s", ColorGray, ColorReset))
 		return false
 	}
@@ -301,100 +362,130 @@ func runSetupWizard(reader *bufio.Reader) bool {
 			return false
 		}
 	}
+	if transport == "ssh-tls" {
+		if !promptSSHTLSInstallationScreen(reader) {
+			return false
+		}
+	}
 
 	var sni string
-	if internalChoice == "2" {
-		fmt.Printf("\n%s[2] Tunnel hostname (SNI / bug host)%s %sskipped for this tunnel type%s\n", ColorYellow, ColorReset, ColorGray, ColorReset)
-		sni = ""
-	} else {
-		fmt.Printf("\n%s[2] Tunnel hostname (SNI / bug host) — optional%s\n", ColorYellow, ColorReset)
-		fmt.Printf("    %sHost categories:%s\n", ColorGray, ColorReset)
-		categories := host_catalog.CategoryOrder()
+	fmt.Printf("\n%s[2] Tunnel hostname (SNI / bug host) — optional%s\n", ColorYellow, ColorReset)
+	fmt.Printf("    %sHost categories:%s\n", ColorGray, ColorReset)
+	categories := host_catalog.CategoryOrder()
+	if len(categories) == 0 {
+		fmt.Printf("    %s[!] No host categories configured.%s\n", ColorYellow, ColorReset)
+	}
+	for i, c := range categories {
+		fmt.Printf("    %s%2d)%s %s%s%s\n", ColorCyan, i+1, ColorReset, ColorGreen, host_catalog.CategoryLabel(c), ColorReset)
+	}
+	var selectedCategory string
+	var explicitCategory bool
+	for {
+		catChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sCategory choice [1-%d]: %s", ColorBold, len(categories), ColorReset))))
 		if len(categories) == 0 {
-			fmt.Printf("    %s[!] No host categories configured.%s\n", ColorYellow, ColorReset)
+			selectedCategory = "custom"
+			explicitCategory = true
+			break
 		}
-		for i, c := range categories {
-			fmt.Printf("    %s%2d)%s %s%s%s\n", ColorCyan, i+1, ColorReset, ColorGreen, host_catalog.CategoryLabel(c), ColorReset)
+		if catChoice == "" {
+			selectedCategory = categories[0]
+			explicitCategory = false
+			break
 		}
-		var selectedCategory string
-		var explicitCategory bool
-		for {
-			catChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sCategory choice [1-%d]: %s", ColorBold, len(categories), ColorReset))))
-			if len(categories) == 0 {
-				selectedCategory = "custom"
-				explicitCategory = true
+		if idx, err := strconv.Atoi(catChoice); err == nil && idx >= 1 && idx <= len(categories) {
+			selectedCategory = categories[idx-1]
+			explicitCategory = true
+			break
+		}
+		fmt.Printf("    %s[!] Enter a number from 1 to %d, or press Enter for category 1 (%s).%s\n",
+			ColorYellow, len(categories), host_catalog.CategoryLabel(categories[0]), ColorReset)
+	}
+	hosts := host_catalog.HostsByCategory(selectedCategory)
+	// If the user did not pick a category explicitly, fall back to the first category that has hosts (legacy behavior).
+	// If they explicitly chose a category (e.g. Custom / Other) with no preset hosts, keep it — do not switch to Gaming.
+	if len(hosts) == 0 && len(categories) > 0 && !explicitCategory {
+		for _, cat := range categories {
+			if h := host_catalog.HostsByCategory(cat); len(h) > 0 {
+				hosts = h
+				selectedCategory = cat
 				break
 			}
-			if catChoice == "" {
-				selectedCategory = categories[0]
-				explicitCategory = false
-				break
-			}
-			if idx, err := strconv.Atoi(catChoice); err == nil && idx >= 1 && idx <= len(categories) {
-				selectedCategory = categories[idx-1]
-				explicitCategory = true
-				break
-			}
-			fmt.Printf("    %s[!] Enter a number from 1 to %d, or press Enter for category 1 (%s).%s\n",
-				ColorYellow, len(categories), host_catalog.CategoryLabel(categories[0]), ColorReset)
 		}
-		hosts := host_catalog.HostsByCategory(selectedCategory)
-		// If the user did not pick a category explicitly, fall back to the first category that has hosts (legacy behavior).
-		// If they explicitly chose a category (e.g. Custom / Other) with no preset hosts, keep it — do not switch to Gaming.
-		if len(hosts) == 0 && len(categories) > 0 && !explicitCategory {
-			for _, cat := range categories {
-				if h := host_catalog.HostsByCategory(cat); len(h) > 0 {
-					hosts = h
-					selectedCategory = cat
-					break
-				}
-			}
-		}
-		fmt.Printf("\n    %sSelected category:%s %s%s%s\n", ColorGray, ColorReset, ColorBold, host_catalog.CategoryLabel(selectedCategory), ColorReset)
-		for i, domain := range hosts {
-			fmt.Printf("    %s%2d)%s %s%s%s\n", ColorCyan, i+1, ColorReset, ColorGreen, domain, ColorReset)
-		}
-		fmt.Printf("    %sc)%s %sCustom host%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
-		fmt.Printf("    %sn)%s %sSkip (no host from list)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+	}
+	fmt.Printf("\n    %sSelected category:%s %s%s%s\n", ColorGray, ColorReset, ColorBold, host_catalog.CategoryLabel(selectedCategory), ColorReset)
+	for i, domain := range hosts {
+		fmt.Printf("    %s%2d)%s %s%s%s\n", ColorCyan, i+1, ColorReset, ColorGreen, domain, ColorReset)
+	}
+	fmt.Printf("    %sc)%s %sCustom host%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
+	fmt.Printf("    %sn)%s %sSkip (no host from list)%s\n", ColorCyan, ColorReset, ColorGray, ColorReset)
 
-		for {
-			sniChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice: %s", ColorBold, ColorReset))))
-			switch {
-			case sniChoice == "c":
-				for {
-					raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("    %sCustom hostname (URL or domain): %s", ColorBold, ColorReset)))
-					if raw == "" {
-						fmt.Printf("    %s[!] Enter a hostname or paste a full URL; we strip https:// and paths.%s\n", ColorYellow, ColorReset)
-						continue
-					}
-					sni = host_catalog.NormalizeHost(raw)
-					if sni == "" {
-						fmt.Printf("    %s[!] Could not parse a hostname from that input.%s\n", ColorYellow, ColorReset)
-						continue
-					}
-					if raw != sni && (strings.Contains(raw, "://") || strings.Contains(raw, "/")) {
-						fmt.Printf("    %s→ %s%s\n", ColorGray, sni, ColorReset)
-					}
-					break
-				}
-			case sniChoice == "n" || sniChoice == "":
-				sni = ""
-			default:
-				idx, err := strconv.Atoi(sniChoice)
-				if err == nil && idx >= 1 && idx <= len(hosts) {
-					sni = hosts[idx-1]
-				} else {
-					if len(hosts) == 0 {
-						fmt.Printf("    %s[!] No preset hosts for this category. Type %sc%s (custom) or %sn%s (skip).%s\n",
-							ColorYellow, ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
-						continue
-					}
-					fmt.Printf("    %s[!] Enter 1-%d, %sc%s (custom), or %sn%s (skip).%s\n",
-						ColorYellow, len(hosts), ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
+	for {
+		sniChoice := strings.TrimSpace(strings.ToLower(prompt(reader, fmt.Sprintf("\n    %sChoice: %s", ColorBold, ColorReset))))
+		switch {
+		case sniChoice == "c":
+			for {
+				raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("    %sCustom hostname (URL or domain): %s", ColorBold, ColorReset)))
+				if raw == "" {
+					fmt.Printf("    %s[!] Enter a hostname or paste a full URL; we strip https:// and paths.%s\n", ColorYellow, ColorReset)
 					continue
 				}
+				sni = host_catalog.NormalizeHost(raw)
+				if sni == "" {
+					fmt.Printf("    %s[!] Could not parse a hostname from that input.%s\n", ColorYellow, ColorReset)
+					continue
+				}
+				if raw != sni && (strings.Contains(raw, "://") || strings.Contains(raw, "/")) {
+					fmt.Printf("    %s→ %s%s\n", ColorGray, sni, ColorReset)
+				}
+				break
 			}
-			break
+		case sniChoice == "n" || sniChoice == "":
+			sni = ""
+		default:
+			idx, err := strconv.Atoi(sniChoice)
+			if err == nil && idx >= 1 && idx <= len(hosts) {
+				sni = hosts[idx-1]
+			} else {
+				if len(hosts) == 0 {
+					fmt.Printf("    %s[!] No preset hosts for this category. Type %sc%s (custom) or %sn%s (skip).%s\n",
+						ColorYellow, ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
+					continue
+				}
+				fmt.Printf("    %s[!] Enter 1-%d, %sc%s (custom), or %sn%s (skip).%s\n",
+					ColorYellow, len(hosts), ColorBold, ColorReset, ColorBold, ColorReset, ColorReset)
+				continue
+			}
+		}
+		break
+	}
+
+	if transport == "ssh-tls" {
+		sni = strings.TrimSpace(sni)
+		for sni == "" {
+			raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("\n    %sSNI / Host is required for SSH + TLS (e.g. www.pubgmobile.com): %s", ColorBold, ColorReset)))
+			if raw == "" {
+				fmt.Printf("    %s[!] Enter the hostname clients will use as SNI (must match the TLS certificate CN).%s\n", ColorYellow, ColorReset)
+				continue
+			}
+			sni = host_catalog.NormalizeHost(raw)
+			if sni == "" {
+				fmt.Printf("    %s[!] Could not parse a hostname from that input.%s\n", ColorYellow, ColorReset)
+			}
+		}
+	}
+
+	if transport == "vless-grpc" {
+		sni = strings.TrimSpace(sni)
+		for sni == "" {
+			raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("\n    %sSNI / Host is required for gRPC Stream (e.g. www.cloudflare.com): %s", ColorBold, ColorReset)))
+			if raw == "" {
+				fmt.Printf("    %s[!] Enter the hostname clients will use as SNI (must match the TLS certificate CN).%s\n", ColorYellow, ColorReset)
+				continue
+			}
+			sni = host_catalog.NormalizeHost(raw)
+			if sni == "" {
+				fmt.Printf("    %s[!] Could not parse a hostname from that input.%s\n", ColorYellow, ColorReset)
+			}
 		}
 	}
 
@@ -421,12 +512,14 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		defaultPort = 51820
 	case "ssh":
 		defaultPort = 22
+	case "ssh-tls":
+		defaultPort = 2053
 	}
 	portInput := prompt(reader, fmt.Sprintf("\n%s[4] Listen port [%d]: %s", ColorYellow, defaultPort, ColorReset))
 	port := cfg.ParsePortOrDefault(portInput, defaultPort)
 
 	var sshUser, sshPass string
-	if transport == "ssh" || transport == "tls" || transport == "wss" {
+	if transport == "ssh" || transport == "tls" || transport == "wss" || transport == "ssh-tls" {
 		sshUser = strings.TrimSpace(prompt(reader, fmt.Sprintf("%s[5] SSH user [tunnelbypass]: %s", ColorYellow, ColorReset)))
 		if sshUser == "" {
 			sshUser = "tunnelbypass"
@@ -437,9 +530,9 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
-	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "vless-ws" || transport == "wss" || transport == "tls"
+	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "vless-ws" || transport == "vless-grpc" || transport == "ssh-tls" || transport == "wss" || transport == "tls"
 
-	if (transport == "ssh" || transport == "wss" || transport == "tls") &&
+	if (transport == "ssh" || transport == "wss" || transport == "tls" || transport == "ssh-tls") &&
 		(strings.EqualFold(strings.TrimSpace(sshPass), "auto") || strings.TrimSpace(sshPass) == "") {
 		// Use the persistent password stored in embed_password.txt (creating it on first run).
 		// This ensures the same password is used across wizard runs and running services,
@@ -536,6 +629,10 @@ func wizardChoiceToTransport(choice string) string {
 		return "wss"
 	case "8":
 		return "vless-ws"
+	case "9":
+		return "ssh-tls"
+	case "10":
+		return "vless-grpc"
 	default:
 		return ""
 	}
@@ -553,6 +650,10 @@ func preferredServiceNameForTransport(transport string) string {
 		return "TunnelBypass-WSS"
 	case "vless-ws":
 		return "TunnelBypass-VLESS-WS"
+	case "vless-grpc":
+		return "TunnelBypass-VLESS-GRPC"
+	case "ssh-tls":
+		return "TunnelBypass-SSH-TLS"
 	case "tls":
 		return "TunnelBypass-SSL"
 	default:

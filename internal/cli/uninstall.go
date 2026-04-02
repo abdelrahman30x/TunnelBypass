@@ -24,7 +24,7 @@ func runUninstallCLI(args []string) {
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	svc := fs.String("service", "", "OS service name (e.g. TunnelBypass-VLESS)")
-	typ := fs.String("type", "", "Transport: reality|vless|vless-ws|hysteria|wireguard|wss|tls (derives service name)")
+	typ := fs.String("type", "", "Transport: reality|vless|vless-ws|ssh-tls|hysteria|wireguard|wss|tls (derives service name)")
 	dataDir := fs.String("data-dir", "", "Data root (same as run --data-dir)")
 	yes := fs.Bool("yes", false, "Skip confirmation prompt")
 	if err := fs.Parse(args); err != nil {
@@ -39,7 +39,7 @@ func runUninstallCLI(args []string) {
 		serviceName = portable.OSServiceNameForTransport(*typ)
 	}
 	if serviceName == "" {
-		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|hysteria|wireguard|wss|tls")
+		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|ssh-tls|hysteria|wireguard|wss|tls")
 		os.Exit(2)
 	}
 	if strings.TrimSpace(*dataDir) != "" {

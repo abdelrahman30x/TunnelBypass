@@ -29,6 +29,8 @@ func findInstalledServices() []string {
 	candidates := []string{
 		"TunnelBypass-VLESS",
 		"TunnelBypass-VLESS-WS",
+		"TunnelBypass-VLESS-GRPC",
+		"TunnelBypass-SSH-TLS",
 		"TunnelBypass-UDP",
 		"TunnelBypass-Hysteria",
 		"TunnelBypass-WireGuard",
@@ -132,7 +134,7 @@ func uninstallAllServices(services []string) {
 			removePortAllocState(s)
 			cleanupArtifactsForTransport(tr, s)
 			// Uninstall UDPGW as a dependency of SSH-based transports (only once)
-			if !udpgwUninstalled && (tr == transportSSH || tr == transportSSL || tr == transportWSS) {
+			if !udpgwUninstalled && (tr == transportSSH || tr == transportSSL || tr == transportWSS || tr == transportSSHTLS) {
 				if serviceExists(installer.UDPGWServiceName) {
 					installer.UninstallService(installer.UDPGWServiceName)
 					removePortAllocState(installer.UDPGWServiceName)
