@@ -3,6 +3,7 @@ package host_catalog
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"math/rand"
 	"net"
 	"net/url"
@@ -56,7 +57,7 @@ func init() {
 		return
 	}
 
-	realityDestHosts = uniqueHosts(f.RealityDest)
+	realityDestHosts = uniqueHostsOrdered(f.RealityDest)
 
 	seedHostToCategory = map[string]string{}
 	var allHosts []string
@@ -154,6 +155,21 @@ func uniqueHosts(in []string) []string {
 		out = append(out, n)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// uniqueHostsOrdered deduplicates while preserving first-seen order (used for reality_dest_hosts).
+func uniqueHostsOrdered(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, h := range in {
+		n := NormalizeHost(h)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
 	return out
 }
 
@@ -267,14 +283,180 @@ func RandomHost() string {
 	return h[r.Intn(len(h))]
 }
 
-// RandomRealityDestHost picks a host suitable for Reality TCP dest.
+// RandomRealityDestHost picks a random host from the effective Reality dest pool.
 func RandomRealityDestHost() string {
-	h := realityDestHosts
+	h := EffectiveRealityDestHosts()
 	if len(h) == 0 {
-		return RandomHost()
+		return "www.facebook.com"
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return h[r.Intn(len(h))]
+}
+
+type realityDestPrefs struct {
+	PreferredHost string   `json:"preferred_host,omitempty"`
+	ExtraHosts    []string `json:"extra_hosts,omitempty"`
+}
+
+func prefsPath() string {
+	return filepath.Join(installer.GetConfigDir("catalog"), "reality_dest_prefs.json")
+}
+
+func loadPrefs() (realityDestPrefs, error) {
+	data, err := os.ReadFile(prefsPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return realityDestPrefs{}, nil
+		}
+		return realityDestPrefs{}, err
+	}
+	data = utils.StripUTF8BOM(data)
+	var p realityDestPrefs
+	if err := json.Unmarshal(data, &p); err != nil {
+		return realityDestPrefs{}, err
+	}
+	return p, nil
+}
+
+func savePrefs(p realityDestPrefs) error {
+	_ = os.MkdirAll(filepath.Dir(prefsPath()), 0755)
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(prefsPath(), data, 0644)
+}
+
+// EffectiveRealityDestHosts returns embedded reality_dest_hosts (order preserved) plus any user-added
+// extras from Diagnostic Tools. Used for Reality serverNames / Hysteria SNI and as the dest pool.
+func EffectiveRealityDestHosts() []string {
+	base := append([]string(nil), realityDestHosts...)
+	p, err := loadPrefs()
+	if err != nil {
+		p = realityDestPrefs{}
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, h := range base {
+		n := NormalizeHost(h)
+		if n == "" {
+			continue
+		}
+		k := strings.ToLower(n)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, n)
+	}
+	for _, h := range p.ExtraHosts {
+		n := NormalizeHost(h)
+		if n == "" {
+			continue
+		}
+		k := strings.ToLower(n)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return []string{"www.facebook.com"}
+	}
+	return out
+}
+
+// PreferredRealityDestHost is the hostname used for Reality TCP dest and Hysteria masquerade when no
+// tunnel SNI is set. Defaults to the first entry in EffectiveRealityDestHosts unless the user chose
+// another in Diagnostic Tools (reality_dest_prefs.json).
+func PreferredRealityDestHost() string {
+	p, err := loadPrefs()
+	if err == nil && strings.TrimSpace(p.PreferredHost) != "" {
+		cand := NormalizeHost(p.PreferredHost)
+		if cand != "" {
+			return cand
+		}
+	}
+	eff := EffectiveRealityDestHosts()
+	if len(eff) > 0 {
+		return eff[0]
+	}
+	return "www.facebook.com"
+}
+
+// DefaultRealityDestAddress is the TCP target for Xray REALITY "dest" and provision defaults.
+// Hostnames in reality_dest_hosts become serverNames; some hosts map to a fixed IP (e.g. one.one.one.one → 1.1.1.1).
+func DefaultRealityDestAddress() string {
+	return realityTCPDestAddress(PreferredRealityDestHost())
+}
+
+func realityTCPDestAddress(host string) string {
+	h := NormalizeHost(host)
+	if h == "" {
+		return "www.facebook.com:443"
+	}
+	if strings.EqualFold(h, "one.one.one.one") {
+		return "1.1.1.1:443"
+	}
+	return h + ":443"
+}
+
+// SetPreferredRealityDestHost persists the user's choice; empty s clears preference (use first in list).
+func SetPreferredRealityDestHost(host string) error {
+	p, err := loadPrefs()
+	if err != nil {
+		p = realityDestPrefs{}
+	}
+	p.PreferredHost = NormalizeHost(strings.TrimSpace(host))
+	return savePrefs(p)
+}
+
+// AddRealityDestExtraHost appends a hostname to the user dest pool (shown in serverNames + dest list).
+func AddRealityDestExtraHost(host string) error {
+	n := NormalizeHost(host)
+	if n == "" {
+		return errors.New("invalid hostname")
+	}
+	p, err := loadPrefs()
+	if err != nil {
+		p = realityDestPrefs{}
+	}
+	for _, e := range p.ExtraHosts {
+		if strings.EqualFold(e, n) {
+			return nil
+		}
+	}
+	p.ExtraHosts = append(p.ExtraHosts, n)
+	return savePrefs(p)
+}
+
+// ClearExtraRealityDestHosts removes user-added dest hosts (embedded list unchanged).
+func ClearExtraRealityDestHosts() error {
+	p, err := loadPrefs()
+	if err != nil {
+		p = realityDestPrefs{}
+	}
+	p.ExtraHosts = nil
+	return savePrefs(p)
+}
+
+// IsRealityDestExtraHost reports whether h came from user prefs (not embedded hosts.json).
+func IsRealityDestExtraHost(h string) bool {
+	n := NormalizeHost(h)
+	if n == "" {
+		return false
+	}
+	p, err := loadPrefs()
+	if err != nil {
+		return false
+	}
+	for _, e := range p.ExtraHosts {
+		if strings.EqualFold(NormalizeHost(e), n) {
+			return true
+		}
+	}
+	return false
 }
 
 // Default hosts minus primary (ExtraSNIs / serverNames).
@@ -309,12 +491,88 @@ func SNIsForSharing(primary string, extras []string) []string {
 	return out
 }
 
-// ServerNamesForVLESS builds Reality serverNames: primary + extras, or full catalog if empty.
-func ServerNamesForVLESS(primary string, extras []string) []string {
-	if primary == "" && len(extras) == 0 {
-		return DefaultHosts()
+// RealitySharingSNIs returns SharingLinkSNIs, or one default host when empty (same bootstrap as Hysteria).
+func RealitySharingSNIs(primary string, extras []string) []string {
+	sharing := SharingLinkSNIs(primary, extras)
+	if len(sharing) == 0 {
+		masq := strings.TrimSpace(primary)
+		if masq == "" {
+			masq = FirstRealityDestHost()
+		}
+		sharing = []string{NormalizeHost(masq)}
 	}
-	return SNIsForSharing(primary, extras)
+	return sharing
+}
+
+// ServerNamesForVLESS builds Xray Reality serverNames: RealitySharingSNIs + reality_dest_hosts from hosts.json.
+func ServerNamesForVLESS(primary string, extras []string) []string {
+	return AppendRealityDestHosts(RealitySharingSNIs(primary, extras))
+}
+
+// AppendRealityDestHosts returns sharing (same list as SharingLinkSNIs / RealitySharingSNIs) plus
+// mandatory Reality dest hosts from hosts.json (reality_dest_hosts), deduplicated. Order: sharing first,
+// then dest. Use for Hysteria tls.sni, Xray Reality serverNames, and metadata — never mergedDefaultHosts.
+func AppendRealityDestHosts(sharing []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(s string) {
+		h := NormalizeHost(s)
+		if h == "" {
+			return
+		}
+		k := strings.ToLower(h)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, h)
+	}
+	for _, h := range sharing {
+		add(h)
+	}
+	destPool := EffectiveRealityDestHosts()
+	for _, h := range destPool {
+		add(h)
+	}
+	if len(out) == 0 {
+		for _, h := range destPool {
+			add(h)
+		}
+	}
+	if len(out) == 0 {
+		add("www.facebook.com")
+		add("m.facebook.com")
+	}
+	return out
+}
+
+// FirstRealityDestHost is an alias for PreferredRealityDestHost (masquerade / cert CN).
+func FirstRealityDestHost() string {
+	return PreferredRealityDestHost()
+}
+
+// SharingLinkSNIs is primary + user extras only (deduped, normalized).
+// Used for CLI sharing links and exports — not the merged preset catalog baked into serverNames.
+func SharingLinkSNIs(primary string, extras []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	add := func(s string) {
+		h := NormalizeHost(s)
+		if h == "" {
+			return
+		}
+		k := strings.ToLower(h)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, h)
+	}
+	add(primary)
+	for _, e := range extras {
+		add(e)
+	}
+	return out
 }
 
 const MetaKey = "_tunnelbypass"
@@ -375,13 +633,18 @@ func HostsByCategory(category string) []string {
 	if c == "" || c == "all" {
 		return nil
 	}
+	// Wizard label "Tech / CDN" maps to JSON key "cdn".
+	if c == "tech" {
+		c = "cdn"
+	}
 	var out []string
 	for _, h := range DefaultHosts() {
 		if c == "general" {
 			if sc, ok := seedHostToCategory[h]; ok && countryCatalogCategories[sc] {
 				continue
 			}
-			if inferCategory(h) != "general" {
+			ic := inferCategory(h)
+			if ic != "general" && ic != "basic" {
 				continue
 			}
 			out = append(out, h)

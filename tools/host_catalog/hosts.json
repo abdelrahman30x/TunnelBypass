@@ -1,9 +1,10 @@
 {
   "reality_dest_hosts": [
-    "cdn.jsdelivr.net",
-    "fonts.gstatic.com",
+    "one.one.one.one",
+    "www.facebook.com",
     "ajax.googleapis.com",
-    "m.facebook.com"
+    "cdn.jsdelivr.net",
+    "www.speedtest.net"
   ],
 
   "categories": {
