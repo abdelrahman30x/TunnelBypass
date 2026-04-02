@@ -198,7 +198,7 @@ func GenerateClientWGURL(cliPath string, name string) (string, error) {
 		// We ensure it includes TunnelBypass + host to avoid generic "name".
 		lower := strings.ToLower(name)
 		if !strings.HasPrefix(lower, "tunnelbypass") {
-			u.Fragment = "TunnelBypass-" + name
+			u.Fragment = "TunnelBypass-WireGuard-" + name
 		} else {
 			u.Fragment = name
 		}

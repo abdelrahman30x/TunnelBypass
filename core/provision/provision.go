@@ -16,6 +16,7 @@ import (
 	"tunnelbypass/core/transports/wireguard"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
+	"tunnelbypass/tools/host_catalog"
 )
 
 type Result = tbtransport.Result
@@ -99,7 +100,7 @@ func provisionReality(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 		opt.ShortIds = utils.GenerateRandomShortIds()
 	}
 	if strings.TrimSpace(opt.RealityDest) == "" {
-		opt.RealityDest = "www.facebook.com:443"
+		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
 	}
 
 	srv, err := vless.GenerateServerConfig(opt)
@@ -123,6 +124,135 @@ func provisionReality(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 		[]byte("# Tunnel — sharing links (all hostnames)\n"+strings.Join(allLinks, "\n\n")), 0644)
 
 	qrPath := filepath.Join(configsDir, "qr-primary.png")
+	if err := utils.SaveQRCodePNG(qrPath, r.SharingLink, 320); err != nil && log != nil {
+		log.Warn("provision: qr png", "err", err)
+	}
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+	r.ListenPort = opt.Port
+	return r, nil
+}
+
+func provisionSSH_TLS(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = "ssh-tls"
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	ensureHost(&opt)
+	if opt.Port == 0 {
+		opt.Port = 2053
+	}
+	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-SSH-TLS")
+
+	if strings.TrimSpace(opt.Sni) == "" {
+		return r, fmt.Errorf("ssh-tls: tunnel hostname (SNI) is required")
+	}
+	opt.UUID = NormalizeUUID(opt.UUID)
+
+	if strings.TrimSpace(opt.SSHUser) == "" {
+		opt.SSHUser = "tunnelbypass"
+	}
+	if strings.TrimSpace(opt.SSHPassword) == "" {
+		opt.SSHPassword = installer.ReadOrCreateEmbedSSHPassword()
+	}
+	if strings.TrimSpace(opt.SSHWelcomeMessage) == "" {
+		opt.SSHWelcomeMessage = fmt.Sprintf("Welcome to TunnelBypass SSH + TLS (direct).\nAuthorized users only.\nUser: %s", opt.SSHUser)
+	}
+
+	if err := installer.EnsureWindowsUser(opt.SSHUser, opt.SSHPassword, true, false); err != nil && log != nil {
+		log.Warn("provision: windows user", "err", err)
+	}
+	if err := ensureSSHBackend(log, &opt); err != nil {
+		return r, err
+	}
+
+	destPort := opt.SSHBackendPort
+	if destPort <= 0 {
+		destPort = installer.GetSSHBackendPort()
+	}
+	if destPort <= 0 {
+		destPort = 22
+	}
+	sshDest := fmt.Sprintf("127.0.0.1:%d", destPort)
+
+	srv, err := vless.GenerateVlessSSHDirectTLSServerConfig(opt, sshDest)
+	if err != nil {
+		return r, fmt.Errorf("ssh-tls server config: %w", err)
+	}
+	cli, err := vless.GenerateVlessSSHDirectTLSClientConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("ssh-tls client config: %w", err)
+	}
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.SharingLink = vless.GenerateVlessSSHDirectTLSURL(opt)
+	r.SSHPort = destPort
+
+	cfgDir := installer.GetConfigDir("ssh-tls")
+	_ = os.MkdirAll(cfgDir, 0755)
+	_ = os.WriteFile(filepath.Join(cfgDir, "sharing-link.txt"),
+		[]byte("# Tunnel — SSH + TLS (direct) — optional VLESS link; SSH clients use TLS to this port\n"+r.SharingLink+"\n"), 0644)
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+	r.ListenPort = opt.Port
+	return r, nil
+}
+
+func provisionVlessGRPC(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = "vless-grpc"
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	ensureHost(&opt)
+	if opt.Port == 0 {
+		opt.Port = 443
+	}
+	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-VLESS-GRPC")
+
+	if strings.TrimSpace(opt.Sni) == "" {
+		return r, fmt.Errorf("vless-grpc: tunnel hostname (SNI) is required")
+	}
+	opt.UUID = NormalizeUUID(opt.UUID)
+	if opt.PrivateKey == "" || opt.PublicKey == "" {
+		priv, pub, err := utils.GenerateX25519Keys()
+		if err != nil {
+			return r, fmt.Errorf("vless-grpc reality keys: %w", err)
+		}
+		opt.PrivateKey, opt.PublicKey = priv, pub
+	}
+	if len(opt.ShortIds) == 0 {
+		opt.ShortIds = utils.GenerateRandomShortIds()
+	}
+	if strings.TrimSpace(opt.RealityDest) == "" {
+		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
+	}
+
+	srv, err := vless.GenerateVlessGRPCServerConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("vless-grpc server config: %w", err)
+	}
+	cli, err := vless.GenerateVlessGRPCClientConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("vless-grpc client config: %w", err)
+	}
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.SharingLink = vless.GenerateVlessGRPCURL(opt)
+
+	configsDir := installer.GetConfigDir("vless-grpc")
+	_ = os.MkdirAll(configsDir, 0755)
+	_ = os.WriteFile(filepath.Join(configsDir, "sharing-link.txt"),
+		[]byte("# Tunnel — VLESS REALITY + gRPC (Elite / DPI-resistant)\n"+r.SharingLink+"\n"), 0644)
+
+	qrPath := filepath.Join(configsDir, "qr-vless-grpc.png")
 	if err := utils.SaveQRCodePNG(qrPath, r.SharingLink, 320); err != nil && log != nil {
 		log.Warn("provision: qr png", "err", err)
 	}
@@ -442,6 +572,14 @@ func NeedsProvision(transport string) bool {
 		return err != nil
 	case "vless-ws":
 		p := filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
+		_, err := os.Stat(p)
+		return err != nil
+	case "vless-grpc":
+		p := filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
+		_, err := os.Stat(p)
+		return err != nil
+	case "ssh-tls":
+		p := filepath.Join(installer.GetConfigDir("ssh-tls"), "server.json")
 		_, err := os.Stat(p)
 		return err != nil
 	case "hysteria":

@@ -18,6 +18,8 @@ func init() {
 	Register("udpgw", func() Transport { return udpgwTransport{} })
 	Register("vless", func() Transport { return vlessTransport{} })
 	Register("vless-ws", func() Transport { return vlesswsTransport{} })
+	Register("vless-grpc", func() Transport { return vlessGrpcTransport{} })
+	Register("ssh-tls", func() Transport { return sshTlsTransport{} })
 	Register("reality", func() Transport { return realityTransport{} })
 	Register("hysteria", func() Transport { return hysteriaTransport{} })
 	Register("wireguard", func() Transport { return wireguardTransport{} })
@@ -88,6 +90,44 @@ func (vlesswsTransport) Run(ctx context.Context, log *slog.Logger, o Options) er
 		return err
 	}
 	_ = WriteRunMeta(installer.GetBaseDir(), "vless-ws", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
+}
+
+type vlessGrpcTransport struct{}
+
+func (vlessGrpcTransport) Name() string { return "vless-grpc" }
+
+func (vlessGrpcTransport) Dependencies() []string { return nil }
+
+func (vlessGrpcTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("vless-grpc", "server.json", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("vless-grpc: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("xray")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "vless-grpc", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
+}
+
+type sshTlsTransport struct{}
+
+func (sshTlsTransport) Name() string { return "ssh-tls" }
+
+func (sshTlsTransport) Dependencies() []string { return nil }
+
+func (sshTlsTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("ssh-tls", "server.json", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("ssh-tls: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("xray")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "ssh-tls", RunMeta{Extra: map[string]any{"config": cfg}})
 	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
 }
 

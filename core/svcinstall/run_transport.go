@@ -27,6 +27,11 @@ func InstallRunTransportService(transport string, opt types.ConfigOptions, isAdm
 	case "vless-ws":
 		cfg := filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
 		return vless.InstallXrayService("TunnelBypass-VLESS-WS", cfg, opt.Port)
+	case "vless-grpc":
+		cfg := filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
+		return vless.InstallXrayService("TunnelBypass-VLESS-GRPC", cfg, opt.Port)
+	case "ssh-tls":
+		return installSshTlsStack(opt, isAdmin)
 	case "hysteria":
 		cfg := filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml")
 		return hysteria.InstallHysteriaService("TunnelBypass-Hysteria", cfg, opt.Port)

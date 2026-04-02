@@ -14,6 +14,12 @@ func init() {
 	transport.RegisterProvision("vless-ws", []string{"vlessws", "xray-wss", "xraywss"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
 		return provisionVlessWS(log, opt, so, co)
 	})
+	transport.RegisterProvision("vless-grpc", []string{"grpc", "grpc-tls"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionVlessGRPC(log, opt, so, co)
+	})
+	transport.RegisterProvision("ssh-tls", []string{"ssh-tls-direct", "vless-tls-ssh"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionSSH_TLS(log, opt, so, co)
+	})
 	transport.RegisterProvision("hysteria", nil, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
 		return provisionHysteria(log, opt, so, co)
 	})

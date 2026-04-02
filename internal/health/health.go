@@ -33,6 +33,7 @@ func Report(w io.Writer) {
 		"TunnelBypass-UDPGW",
 		"TunnelBypass-WSS",
 		"TunnelBypass-VLESS-WS",
+		"TunnelBypass-VLESS-GRPC",
 		"TunnelBypass-SSL",
 	}
 	for _, n := range names {

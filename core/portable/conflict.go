@@ -190,6 +190,10 @@ func OSServiceNameForTransport(t string) string {
 		return "TunnelBypass-VLESS"
 	case "vless-ws":
 		return "TunnelBypass-VLESS-WS"
+	case "vless-grpc":
+		return "TunnelBypass-VLESS-GRPC"
+	case "ssh-tls":
+		return "TunnelBypass-SSH-TLS"
 	case "hysteria":
 		return "TunnelBypass-Hysteria"
 	case "wireguard":
@@ -213,6 +217,13 @@ func inferOSServiceName(requestedTransport, processName, runningTransport string
 	pl := strings.ToLower(processName)
 	switch {
 	case strings.Contains(pl, "xray"):
+		rt := strings.ToLower(requestedTransport)
+		if strings.Contains(rt, "ssh-tls") {
+			return "TunnelBypass-SSH-TLS"
+		}
+		if rt == "grpc" || strings.Contains(rt, "vless-grpc") || strings.Contains(rt, "grpc-tls") {
+			return "TunnelBypass-VLESS-GRPC"
+		}
 		return "TunnelBypass-VLESS"
 	case strings.Contains(pl, "hysteria"):
 		return "TunnelBypass-Hysteria"

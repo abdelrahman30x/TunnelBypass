@@ -15,6 +15,7 @@ import (
 	"tunnelbypass/core/provision"
 	"tunnelbypass/core/svcinstall"
 	"tunnelbypass/core/transport"
+	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
 	"tunnelbypass/internal/elevate"
@@ -63,7 +64,7 @@ func conflictCommandHint(spec cfg.RunSpec) string {
 
 func transportInstallsOSService(transport string) bool {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
-	case "reality", "vless", "vless-ws", "hysteria", "wireguard", "wss", "tls":
+	case "reality", "vless", "vless-ws", "ssh-tls", "hysteria", "wireguard", "wss", "tls":
 		return true
 	default:
 		return false
@@ -174,7 +175,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	if spec.Transport == "tls" {
 		pOpts.StunnelAccept = spec.Port
 	}
-	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" {
+	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" || spec.Transport == "ssh-tls" {
 		pOpts.ConfigPath = res.ServerConfigPath
 	}
 
@@ -211,7 +212,7 @@ func PrintResult(spec cfg.RunSpec, res transport.Result) {
 	if res.SharingLink != "" {
 		fmt.Printf("\n--- Client: copy this sharing link ---\n%s\n---\n", res.SharingLink)
 	}
-	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss"
+	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss" || spec.Transport == "ssh-tls"
 	if tunnelSSH && spec.SSH.Port > 0 {
 		fmt.Printf("SSH port: %d\n", spec.SSH.Port)
 	}
@@ -240,6 +241,37 @@ func PrintResult(spec cfg.RunSpec, res transport.Result) {
 	if strings.TrimSpace(spec.Paths.LogsDir) != "" {
 		fmt.Printf("Logs dir (override): %s\n", spec.Paths.LogsDir)
 	}
+}
+
+// printPrettySSHTLSDirectConnect summarizes SSH-over-TLS (Xray VLESS + TLS fallback to SSH) for generic mobile clients.
+func printPrettySSHTLSDirectConnect(spec cfg.RunSpec, res transport.Result, endpoint string) {
+	sni := strings.TrimSpace(spec.SNI)
+	fmt.Printf("\n%s╔══════════════════════════════════════════════════════════════╗%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
+	fmt.Printf("%s║          %sCONNECTION SUMMARY — SSH + TLS (Direct)%s           ║%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorBold, uicolors.ColorCyan, uicolors.ColorReset)
+	fmt.Printf("%s╚══════════════════════════════════════════════════════════════╝%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
+	fmt.Printf("  %sIP Address:%s   %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, endpoint, uicolors.ColorReset)
+	fmt.Printf("  %sPort:%s         %s%d%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Port, uicolors.ColorReset)
+	fmt.Printf("  %sSNI:%s          %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, sni, uicolors.ColorReset)
+	fmt.Printf("  %sTLS Status:%s   %sON%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, uicolors.ColorReset)
+	fmt.Printf("  %sSSH Username:%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.Auth.SSHUser, uicolors.ColorReset)
+	fmt.Printf("  %sSSH Password:%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorYellow, spec.Auth.SSHPass, uicolors.ColorReset)
+	fmt.Printf("\n  %sNo client-side TunnelBypass binary required. Use directly in Netmod / HTTP Custom.%s\n", uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset)
+	if res.ServerConfigPath != "" {
+		fmt.Printf("\n  %sServer config:%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorGray, res.ServerConfigPath, uicolors.ColorReset)
+	}
+	if res.ClientConfigPath != "" {
+		fmt.Printf("  %sOptional VLESS client export:%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorGray, res.ClientConfigPath, uicolors.ColorReset)
+	}
+	dataDir := installer.GetBaseDir()
+	logsDir := filepath.Join(dataDir, "logs")
+	fmt.Printf("  %sData dir:%s     %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorGray, dataDir, uicolors.ColorReset)
+	fmt.Printf("  %sLogs:%s         %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBlue, logsDir, uicolors.ColorReset)
+	if res.SharingLink != "" {
+		fmt.Printf("\n  %sOptional VLESS link (TCP+TLS):%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		fmt.Printf("  %s%s%s\n", uicolors.ColorBold+uicolors.ColorGreen, res.SharingLink, uicolors.ColorReset)
+	}
+	fmt.Printf("\n  %sTLS 1.3 cipher check (openssl must offer only AES-256 or you may see AES-128):%s\n", uicolors.ColorGray, uicolors.ColorReset)
+	fmt.Printf("  %s%s%s\n", uicolors.ColorGray, vless.OpenSSLVerifyTLS13AES256Command(endpoint, spec.Port, sni), uicolors.ColorReset)
 }
 
 // printPrettyClientTunnel is the compact ssh/tls/wss summary (one box, no instruction file dump).
@@ -352,6 +384,10 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 		endpoint = "127.0.0.1"
 	}
 	transportName := strings.ToLower(strings.TrimSpace(spec.Transport))
+	if transportName == "ssh-tls" {
+		printPrettySSHTLSDirectConnect(spec, res, endpoint)
+		return
+	}
 	if transportName == "ssh" || transportName == "tls" || transportName == "wss" {
 		printPrettyClientTunnel(spec, res, endpoint, transportName)
 		return
