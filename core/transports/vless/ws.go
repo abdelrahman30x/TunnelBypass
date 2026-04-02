@@ -251,7 +251,7 @@ func GenerateVlessWSURL(opt types.ConfigOptions) string {
 	// keeping '/' and '?' readable — matching what Xray/v2ray clients expect.
 	pathEnc := strings.ReplaceAll(url.PathEscape(wsPath), "=", "%3D")
 
-	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-VLESS-WS-%s", utils.SanitizeForTag(sni)))
+	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-VLESS-WS-TLS-%s", utils.SanitizeForTag(sni)))
 	return fmt.Sprintf(
 		"vless://%s@%s:%d?encryption=none&security=tls&sni=%s&allowInsecure=true&fp=chrome&type=ws&host=%s&path=%s&packetEncoding=xudp#%s",
 		opt.UUID, endpoint, opt.Port,

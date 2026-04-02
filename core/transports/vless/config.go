@@ -23,10 +23,11 @@ type XrayConfig struct {
 // Xray Reality server config JSON under configs/vless.
 func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 	if opt.RealityDest == "" {
-		opt.RealityDest = host_catalog.RandomRealityDestHost() + ":443"
+		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
 	}
 
-	serverNames := host_catalog.ServerNamesForVLESS(opt.Sni, opt.ExtraSNIs)
+	sharingSNIs := host_catalog.RealitySharingSNIs(opt.Sni, opt.ExtraSNIs)
+	serverNames := host_catalog.AppendRealityDestHosts(sharingSNIs)
 
 	sids := opt.ShortIds
 	if len(sids) == 0 {
@@ -49,11 +50,20 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 		email = fmt.Sprintf("TunnelBypass-%s", hostLabel)
 	}
 
+	sharingIface := make([]interface{}, len(sharingSNIs))
+	for i, s := range sharingSNIs {
+		sharingIface[i] = s
+	}
+
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "warning",
 			"access":   getAbsLogPath("xray_access.log"),
 			"error":    getAbsLogPath("xray_error.log"),
+		},
+		host_catalog.MetaKey: map[string]interface{}{
+			"version":     1,
+			"sharingSNIs": sharingIface,
 		},
 		"api": map[string]interface{}{
 			"tag":      "api",
@@ -281,10 +291,10 @@ func GenerateVlessURLForSNI(opt types.ConfigOptions, sni string) string {
 	switch {
 	case opt.Host != "":
 		endpoint = opt.Host
-	case opt.Sni != "":
-		endpoint = opt.Sni
 	case opt.ServerAddr != "":
 		endpoint = opt.ServerAddr
+	case opt.Sni != "":
+		endpoint = opt.Sni
 	default:
 		endpoint = host_catalog.RandomHost()
 	}
@@ -293,7 +303,7 @@ func GenerateVlessURLForSNI(opt types.ConfigOptions, sni string) string {
 	if len(opt.ShortIds) > 0 {
 		sid = opt.ShortIds[0]
 	}
-	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-%s", utils.SanitizeForTag(sni)))
+	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-VLESS-Reality-%s", utils.SanitizeForTag(sni)))
 
 	return fmt.Sprintf(
 		"vless://%s@%s:%d?security=reality&encryption=none&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=tcp&headerType=none&alpn=h2%%2Chttp%%2F1.1&flow=xtls-rprx-vision#%s",
@@ -309,10 +319,12 @@ func GenerateV2rayNJSON(opt types.ConfigOptions, publicIP string) string {
 	switch {
 	case opt.Host != "":
 		endpoint = opt.Host
-	case opt.Sni != "":
-		endpoint = opt.Sni
 	case publicIP != "":
 		endpoint = publicIP
+	case opt.ServerAddr != "":
+		endpoint = opt.ServerAddr
+	case opt.Sni != "":
+		endpoint = opt.Sni
 	default:
 		endpoint = host_catalog.RandomHost()
 	}
@@ -321,25 +333,29 @@ func GenerateV2rayNJSON(opt types.ConfigOptions, publicIP string) string {
 	if len(opt.ShortIds) > 0 {
 		sid = opt.ShortIds[0]
 	}
+	ps := fmt.Sprintf("TunnelBypass-VLESS-Reality-%s", utils.SanitizeForTag(opt.Sni))
 	return fmt.Sprintf(
-		`{"v":"2","ps":"VLESS-Reality","add":%q,"port":"%d","id":%q,"aid":"0","scy":"none","net":"tcp","type":"none","host":"","path":"","tls":"reality","sni":%q,"alpn":"h2,http/1.1","fp":"chrome","pbk":%q,"sid":%q,"spx":"/","flow":"xtls-rprx-vision","tlsVersion":"1.3"}`,
-		endpoint, opt.Port, opt.UUID, opt.Sni, opt.PublicKey, sid,
+		`{"v":"2","ps":%q,"add":%q,"port":"%d","id":%q,"aid":"0","scy":"none","net":"tcp","type":"none","host":"","path":"","tls":"reality","sni":%q,"alpn":"h2,http/1.1","fp":"chrome","pbk":%q,"sid":%q,"spx":"/","flow":"xtls-rprx-vision","tlsVersion":"1.3"}`,
+		ps, endpoint, opt.Port, opt.UUID, opt.Sni, opt.PublicKey, sid,
 	)
 }
 
-// One VLESS URL per catalog SNI (comment + URL lines).
+// One VLESS URL per sharing SNI (primary + extras — not the full merged catalog).
 func GenerateAllSNIUrls(opt types.ConfigOptions) []string {
 	var urls []string
-	for _, sni := range host_catalog.SNIsForSharing(opt.Sni, opt.ExtraSNIs) {
+	for _, sni := range host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs) {
+		if sni == "" {
+			continue
+		}
 		urls = append(urls, fmt.Sprintf("# %s\n%s", sni, GenerateVlessURLForSNI(opt, sni)))
 	}
 	return urls
 }
 
-// ShareLink slice for Reality (one entry per SNI).
+// ShareLink slice for Reality (one entry per sharing SNI).
 func GenerateShareLinks(opt types.ConfigOptions) []utils.ShareLink {
 	var links []utils.ShareLink
-	for _, sni := range host_catalog.SNIsForSharing(opt.Sni, opt.ExtraSNIs) {
+	for _, sni := range host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs) {
 		if sni == "" {
 			continue
 		}
