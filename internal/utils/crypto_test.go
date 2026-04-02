@@ -63,6 +63,20 @@ func TestGenerateX25519KeysAreDistinct(t *testing.T) {
 	}
 }
 
+func TestX25519PublicKeyFromPrivateMatchesGenerated(t *testing.T) {
+	priv, pub, err := GenerateX25519Keys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := X25519PublicKeyFromPrivate(priv)
+	if err != nil {
+		t.Fatalf("X25519PublicKeyFromPrivate: %v", err)
+	}
+	if derived != pub {
+		t.Errorf("derived public %q != expected %q", derived, pub)
+	}
+}
+
 // TestGenerateRandomShortIds verifies the structure of generated short IDs.
 func TestGenerateRandomShortIds(t *testing.T) {
 	ids := GenerateRandomShortIds()
