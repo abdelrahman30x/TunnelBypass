@@ -2,6 +2,7 @@ package hysteria
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,9 +21,18 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 		opt.Port = 443
 	}
 
-	serverNames := host_catalog.SNIsForSharing(opt.Sni, opt.ExtraSNIs)
-	if len(serverNames) == 0 {
-		serverNames = host_catalog.DefaultHosts()
+	sharingSNIs := host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs)
+	if len(sharingSNIs) == 0 {
+		masq := strings.TrimSpace(opt.Sni)
+		if masq == "" {
+			masq = host_catalog.FirstRealityDestHost()
+		}
+		sharingSNIs = []string{host_catalog.NormalizeHost(masq)}
+	}
+	serverNames := host_catalog.AppendRealityDestHosts(sharingSNIs)
+	sharingIface := make([]interface{}, len(sharingSNIs))
+	for i, s := range sharingSNIs {
+		sharingIface[i] = s
 	}
 	masquerade := opt.Sni
 	if masquerade == "" {
@@ -33,11 +43,7 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	if clientSNI == "" {
 		clientSNI = masquerade
 	}
-	obfsPassword := strings.TrimSpace(opt.ObfsPassword)
-	// Salamander obfs needs PSK >= 4 bytes; empty or short clears obfs here.
-	if len(obfsPassword) < 4 {
-		obfsPassword = ""
-	}
+	obfsPassword := effectiveObfsPassword(opt)
 
 	configsDir := installer.GetConfigDir("hysteria")
 	_ = os.MkdirAll(configsDir, 0755)
@@ -46,8 +52,7 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	_ = installer.EnsureSelfSignedCert(certPath, keyPath, clientSNI)
 
 	serverConfig := map[string]interface{}{
-		"listen":   fmt.Sprintf("0.0.0.0:%d", opt.Port),
-		"protocol": "udp",
+		"listen": ListenAddr(opt.Port),
 		"tls": map[string]interface{}{
 			"cert": certPath,
 			"key":  keyPath,
@@ -59,23 +64,19 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 			"password": opt.UUID,
 		},
 		"masquerade": map[string]interface{}{
-			"type": "proxy",
-			"proxy": map[string]interface{}{
-				"url":         "https://" + masquerade + "/",
-				"rewriteHost": true,
+			"type": "string",
+			"string": map[string]interface{}{
+				"content": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title></title></head><body></body></html>",
+				"headers": map[string]interface{}{
+					"content-type": "text/html; charset=utf-8",
+				},
 			},
 		},
-		"bandwidth": map[string]interface{}{
-			"up":   "100 mbps",
-			"down": "100 mbps",
-		},
-		"quic": map[string]interface{}{
-			"initStreamReceiveWindow": 16777216,
-			"maxStreamReceiveWindow":  33554432,
-			"initConnReceiveWindow":   33554432,
-			"maxConnReceiveWindow":    67108864,
-			"maxIncomingStreams":      1024,
-			"maxIdleTimeout":          "30s",
+		"obfs": map[string]interface{}{
+			"type": "salamander",
+			"salamander": map[string]interface{}{
+				"password": obfsPassword,
+			},
 		},
 		"speedTest":      false,
 		"disableUDP":     false,
@@ -88,21 +89,7 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 			"udpPorts":      "all",
 		},
 		"resolver": map[string]interface{}{
-			"type": "udp",
-			"udp": map[string]interface{}{
-				"addr":    "8.8.4.4:53",
-				"timeout": "4s",
-			},
-			"tcp": map[string]interface{}{
-				"addr":    "8.8.8.8:53",
-				"timeout": "4s",
-			},
-			"tls": map[string]interface{}{
-				"addr":     "1.1.1.1:853",
-				"timeout":  "10s",
-				"sni":      "cloudflare-dns.com",
-				"insecure": false,
-			},
+			"type": "https",
 			"https": map[string]interface{}{
 				"addr":     "1.1.1.1:443",
 				"timeout":  "10s",
@@ -117,6 +104,7 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 		},
 		host_catalog.MetaKey: map[string]interface{}{
 			"serverNames": serverNames,
+			"sharingSNIs": sharingIface,
 			"version":     1,
 			// Extra metadata for UI/branding purposes.
 			"name": fmt.Sprintf("TunnelBypass-%s", masquerade),
@@ -129,15 +117,17 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	}
 
 	clientConfig := map[string]interface{}{
-		"server": fmt.Sprintf("%s:%d", endpoint, opt.Port),
+		"server": ClientServerAddr(endpoint, opt.Port),
 		"auth":   opt.UUID,
 		"tls": map[string]interface{}{
 			"sni":      clientSNI,
 			"insecure": true,
 		},
-		"bandwidth": map[string]interface{}{
-			"up":   "20 mbps",
-			"down": "50 mbps",
+		"obfs": map[string]interface{}{
+			"type": "salamander",
+			"salamander": map[string]interface{}{
+				"password": obfsPassword,
+			},
 		},
 		"socks5": map[string]interface{}{
 			"listen": "127.0.0.1:1080",
@@ -145,20 +135,6 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 		"http": map[string]interface{}{
 			"listen": "127.0.0.1:8080",
 		},
-	}
-	if obfsPassword != "" {
-		serverConfig["obfs"] = map[string]interface{}{
-			"type": "salamander",
-			"salamander": map[string]interface{}{
-				"password": obfsPassword,
-			},
-		}
-		clientConfig["obfs"] = map[string]interface{}{
-			"type": "salamander",
-			"salamander": map[string]interface{}{
-				"password": obfsPassword,
-			},
-		}
 	}
 
 	srvData, err := yaml.Marshal(serverConfig)
@@ -195,15 +171,11 @@ func effectivePrimarySNI(opt types.ConfigOptions) string {
 	if opt.Sni != "" {
 		return opt.Sni
 	}
-	names := host_catalog.SNIsForSharing("", opt.ExtraSNIs)
-	if len(names) > 0 {
-		return names[0]
+	user := host_catalog.SharingLinkSNIs("", opt.ExtraSNIs)
+	if len(user) > 0 {
+		return user[0]
 	}
-	h := host_catalog.DefaultHosts()
-	if len(h) > 0 {
-		return h[0]
-	}
-	return ""
+	return host_catalog.FirstRealityDestHost()
 }
 
 func GenerateHysteriaURLForSNI(opt types.ConfigOptions, sni string) string {
@@ -211,30 +183,33 @@ func GenerateHysteriaURLForSNI(opt types.ConfigOptions, sni string) string {
 	if opt.Host != "" {
 		endpoint = opt.Host
 	}
-
-	obfsPassword := strings.TrimSpace(opt.ObfsPassword)
-	obfsStr := ""
-	if len(obfsPassword) >= 4 {
-		obfsStr = fmt.Sprintf("&obfs=salamander&obfs-password=%s", obfsPassword)
-	}
-	tag := "TunnelBypass"
-	return fmt.Sprintf("hysteria2://%s@%s:%d/?sni=%s&insecure=1%s#%s-%s",
-		opt.UUID, endpoint, opt.Port, sni, obfsStr, tag, sni)
+	pw := effectiveObfsPassword(opt)
+	obfsStr := fmt.Sprintf("&obfs=salamander&obfs-password=%s", url.QueryEscape(pw))
+	addr := ClientServerAddr(endpoint, opt.Port)
+	frag := fmt.Sprintf("TunnelBypass-Hysteria2-%s", utils.SanitizeForTag(sni))
+	// Extra query keys for sing-box / NekoBox-style clients: HTTP/3 ALPN, uTLS Chrome, TLS fragment (not record_fragment).
+	// Official hysteria ignores unknown parameters per URI scheme notes; subscribers and manual JSON import may use these.
+	tlsHints := "&alpn=h3&fp=chrome&fragment=1"
+	return fmt.Sprintf("hysteria2://%s@%s/?sni=%s&insecure=1%s%s#%s",
+		opt.UUID, addr, url.QueryEscape(sni), obfsStr, tlsHints, url.QueryEscape(frag))
 }
 
-// GenerateAllSNIUrls is one URL per configured/catalog SNI (like VLESS).
+// GenerateAllSNIUrls is one URL per primary + extra SNIs (not the full merged catalog).
 func GenerateAllSNIUrls(opt types.ConfigOptions) []string {
 	var urls []string
-	for _, sni := range host_catalog.SNIsForSharing(opt.Sni, opt.ExtraSNIs) {
+	for _, sni := range host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs) {
+		if sni == "" {
+			continue
+		}
 		urls = append(urls, fmt.Sprintf("# %s\n%s", sni, GenerateHysteriaURLForSNI(opt, sni)))
 	}
 	return urls
 }
 
-// GenerateShareLinks is labeled hysteria2:// links per SNI.
+// GenerateShareLinks is labeled hysteria2:// links per sharing SNI.
 func GenerateShareLinks(opt types.ConfigOptions) []utils.ShareLink {
 	var links []utils.ShareLink
-	for _, sni := range host_catalog.SNIsForSharing(opt.Sni, opt.ExtraSNIs) {
+	for _, sni := range host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs) {
 		if sni == "" {
 			continue
 		}
@@ -293,61 +268,116 @@ func ReadServerNamesFromServerConfig(configPath string) ([]string, error) {
 	return out, nil
 }
 
-// AppendServerName adds an SNI to server.yaml; false if already present.
-func AppendServerName(configPath, newSni string) (added bool, err error) {
+// AppendServerName adds newSni to sharingSNIs and sets serverNames = AppendRealityDestHosts(sharingSNIs)
+// (same rule as GenerateHysteriaConfig). If newSni is already in sharingSNIs, returns false.
+// sharingOnly is true when newSni was already in the TLS list (e.g. a dest host) and only sharing links were extended.
+func AppendServerName(configPath, newSni string) (added bool, sharingOnly bool, err error) {
+	newSni = host_catalog.NormalizeHost(newSni)
 	if newSni == "" {
-		return false, nil
+		return false, false, nil
 	}
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	data = utils.StripUTF8BOM(data)
 	var root map[string]interface{}
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return false, err
+		return false, false, err
 	}
 	meta, ok := root[host_catalog.MetaKey].(map[string]interface{})
 	if !ok {
-		meta = map[string]interface{}{"version": 1, "serverNames": []interface{}{}}
+		meta = map[string]interface{}{"version": 1}
 		root[host_catalog.MetaKey] = meta
 	}
-	var names []interface{}
-	if arr, ok := meta["serverNames"].([]interface{}); ok {
-		names = append([]interface{}{}, arr...)
-	}
-	// Seed names from masquerade when metadata array is empty.
-	if len(names) == 0 {
-		if mm, ok := root["masquerade"].(map[string]interface{}); ok {
-			if proxy, ok := mm["proxy"].(map[string]interface{}); ok {
-				if rawURL, ok := proxy["url"].(string); ok && rawURL != "" {
-					host := rawURL
-					host = strings.TrimPrefix(host, "https://")
-					host = strings.TrimPrefix(host, "http://")
-					if i := strings.Index(host, "/"); i >= 0 {
-						host = host[:i]
-					}
-					if host != "" {
-						names = []interface{}{host}
-					}
-				}
-			}
-		} else if masq, ok := root["masquerade"].(string); ok && masq != "" {
-			// Backward compatibility with old string shape.
-			names = []interface{}{masq}
+
+	sharingStrs := yamlStringSlice(meta["sharingSNIs"])
+	if len(sharingStrs) == 0 {
+		if h := masqueradeHostFromRoot(root); h != "" {
+			sharingStrs = []string{host_catalog.NormalizeHost(h)}
 		}
 	}
-	for _, v := range names {
-		if s, ok := v.(string); ok && s == newSni {
-			return false, nil
+	for _, s := range sharingStrs {
+		if strings.EqualFold(strings.TrimSpace(s), newSni) {
+			return false, false, nil
 		}
 	}
-	names = append(names, newSni)
-	meta["serverNames"] = names
+
+	namesBefore := yamlStringSlice(meta["serverNames"])
+	if len(namesBefore) == 0 {
+		if tlsMap, ok := root["tls"].(map[string]interface{}); ok {
+			namesBefore = yamlStringSlice(tlsMap["sni"])
+		}
+	}
+	inNamesBefore := hostListContainsFold(namesBefore, newSni)
+
+	sharingStrs = append(sharingStrs, newSni)
+	serverNames := host_catalog.AppendRealityDestHosts(sharingStrs)
+
+	meta["sharingSNIs"] = stringsToYAMLIface(sharingStrs)
+	meta["serverNames"] = stringsToYAMLIface(serverNames)
 	meta["version"] = 1
+	if tlsMap, ok := root["tls"].(map[string]interface{}); ok {
+		tlsMap["sni"] = stringsToYAMLIface(serverNames)
+	}
 	out, err := yaml.Marshal(root)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return true, os.WriteFile(configPath, out, 0644)
+	return true, inNamesBefore, os.WriteFile(configPath, out, 0644)
+}
+
+func yamlStringSlice(v interface{}) []string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, x := range arr {
+		if s, ok := x.(string); ok {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+func stringsToYAMLIface(ss []string) []interface{} {
+	out := make([]interface{}, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
+}
+
+func masqueradeHostFromRoot(root map[string]interface{}) string {
+	if mm, ok := root["masquerade"].(map[string]interface{}); ok {
+		if proxy, ok := mm["proxy"].(map[string]interface{}); ok {
+			if rawURL, ok := proxy["url"].(string); ok && rawURL != "" {
+				host := rawURL
+				host = strings.TrimPrefix(host, "https://")
+				host = strings.TrimPrefix(host, "http://")
+				if i := strings.Index(host, "/"); i >= 0 {
+					host = host[:i]
+				}
+				return host
+			}
+		}
+	}
+	if m, ok := root["masquerade"].(string); ok {
+		return m
+	}
+	return ""
+}
+
+func hostListContainsFold(hosts []string, h string) bool {
+	h = strings.TrimSpace(h)
+	for _, x := range hosts {
+		if strings.EqualFold(strings.TrimSpace(x), h) {
+			return true
+		}
+	}
+	return false
 }
