@@ -24,15 +24,6 @@ func ensureOpenSSHServerInstall() error {
 	}
 
 	if runtime.GOOS != "windows" {
-		if runtime.GOOS == "darwin" {
-			if brew, err := exec.LookPath("brew"); err == nil && brew != "" {
-				_ = exec.Command(brew, "install", "openssh").Run()
-				if PortListening(22) {
-					return nil
-				}
-			}
-			return fmt.Errorf("sshd not found and auto-install failed")
-		}
 		for _, pkg := range [][]string{
 			{"apt-get", "install", "-y", "openssh-server"},
 			{"yum", "install", "-y", "openssh-server"},

@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/types"
 )
 
 // InstallHysteriaService registers hysteria with the TunnelBypass service wrapper.
-func InstallHysteriaService(serviceName, configPath string, port int) error {
+func InstallHysteriaService(serviceName, configPath string, port int, opt types.ConfigOptions) error {
 	hyPath, err := installer.EnsureBinary("hysteria")
 	if err != nil {
 		return err
@@ -29,7 +30,10 @@ func InstallHysteriaService(serviceName, configPath string, port int) error {
 		return fmt.Errorf("failed to create hysteria service: %v", err)
 	}
 
-	_ = installer.ApplyLinuxTransitNetworking()
+	if err := installer.ApplyLinuxTransitNetworking(opt); err != nil {
+		installer.RunLinuxRollback()
+		return err
+	}
 
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "udp", serviceName)

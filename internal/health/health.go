@@ -1,4 +1,4 @@
-// Package health: local status snapshot (no outbound probes).
+// Package health: local status snapshot and optional outbound latency probes (--ping-check).
 package health
 
 import (
@@ -17,7 +17,7 @@ import (
 	"tunnelbypass/internal/utils"
 )
 
-func Report(w io.Writer) {
+func Report(w io.Writer, pingCheck bool) {
 	base := installer.GetBaseDir()
 	_, _ = fmt.Fprintf(w, "data_dir: %s\n", base)
 	_, _ = fmt.Fprintf(w, "ssh_port_22_listening: %v\n", installer.PortListening(22))
@@ -87,6 +87,9 @@ func Report(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "\nhints:")
 	_, _ = fmt.Fprintln(w, "  - If native services are used, check OS service manager instead of pid files.")
 	_, _ = fmt.Fprintln(w, "  - For crash loops see logs/TunnelBypass-Service.log (supervisor stops after repeated short crashes).")
+	if pingCheck {
+		WritePingCheck(w)
+	}
 }
 
 func printPortableRegistry(w io.Writer) {
@@ -120,6 +123,6 @@ func printPortableRegistry(w io.Writer) {
 
 func Summary() string {
 	var b strings.Builder
-	Report(&b)
+	Report(&b, false)
 	return b.String()
 }

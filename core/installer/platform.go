@@ -38,8 +38,8 @@ func OpenFirewallPort(port int, protocol, name string) error {
 			"name="+ruleName, "dir=in", "action=allow", "protocol="+strings.ToUpper(protocol), "localport="+portStr)
 		return cmd.Run()
 	}
-	if runtime.GOOS == "darwin" {
-		fmt.Fprintf(os.Stderr, "[!] Skipped automatic inbound firewall rule for %q port %d/%s: macOS uses Application Firewall and pf, not ufw/iptables. If remote clients cannot connect, allow this app or TCP %s in System Settings > Network > Firewall, or configure pf.\n", ruleName, port, protocol, portStr)
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		fmt.Fprintf(os.Stderr, "[!] Skipped automatic inbound firewall rule for %q port %d/%s: only Windows and Linux implement automatic inbound rules here; open TCP %s in your firewall if needed.\n", ruleName, port, protocol, portStr)
 		return nil
 	}
 	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
@@ -100,7 +100,7 @@ func CloseFirewallPort(port int, protocol, name string) error {
 		return nil
 	}
 
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		return nil
 	}
 
@@ -135,7 +135,7 @@ func OpenFirewallOutboundPort(remotePort int, protocol, name string) error {
 		return cmd.Run()
 	}
 
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		return nil
 	}
 

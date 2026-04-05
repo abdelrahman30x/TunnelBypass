@@ -137,7 +137,10 @@ function Detect-RemoteSystem {
     # Map OS
     $mappedOs = switch -Regex ($remoteOs) {
         "Linux" { "linux" }
-        "Darwin" { "darwin" }
+        "Darwin" {
+            Log-Error "Remote macOS is not supported as a TunnelBypass server host; use Linux or Windows."
+            exit 1
+        }
         "CYGWIN|MINGW|MSYS" { "windows" }
         default {
             Log-Error "Unsupported OS: $remoteOs"

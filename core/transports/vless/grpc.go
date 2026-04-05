@@ -98,10 +98,11 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 					"network":  "grpc",
 					"security": "reality",
 					"grpcSettings": map[string]interface{}{
-						"serviceName":        serviceName,
-						"multiMode":          true,
-						"idleTimeout":        60,
-						"healthCheckTimeout": 20,
+						"serviceName":          serviceName,
+						"multiMode":            true,
+						"idleTimeout":          30,
+						"healthCheckTimeout":   15,
+						"initial_windows_size": 524288,
 					},
 					"realitySettings": map[string]interface{}{
 						"show":        false,
@@ -120,7 +121,7 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 				},
 				"sniffing": map[string]interface{}{
 					"enabled":      true,
-					"destOverride": []string{"http", "tls", "quic"},
+					"destOverride": []string{"http", "tls"},
 				},
 			},
 		},
@@ -138,7 +139,7 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 			},
 		},
 		"routing": map[string]interface{}{
-			"domainStrategy": "IPIfNonMatch",
+			"domainStrategy": "UseIPv4",
 			"rules": []interface{}{
 				map[string]interface{}{
 					"type":        "field",
@@ -162,6 +163,8 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 			},
 		},
 	}
+
+	MergeXrayDNSIntoConfig(config)
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -284,7 +287,7 @@ func GenerateVlessGRPCURL(opt types.ConfigOptions) string {
 	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-gRPC-Reality-%s", utils.SanitizeForTag(sni)))
 
 	return fmt.Sprintf(
-		"vless://%s@%s:%d?encryption=none&security=reality&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=grpc&serviceName=%s&mode=multi#%s",
+		"vless://%s@%s:%d?encryption=none&security=reality&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=grpc&serviceName=%s&mode=multi&packetEncoding=xudp#%s",
 		opt.UUID,
 		endpoint,
 		opt.Port,

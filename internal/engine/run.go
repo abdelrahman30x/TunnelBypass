@@ -130,6 +130,10 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		SSHUser:        strings.TrimSpace(spec.Auth.SSHUser),
 		SSHPassword:    strings.TrimSpace(spec.Auth.SSHPass),
 		SSHBackendPort: spec.SSH.Port, // Pass SSH port to provisioning
+		LinuxOptimizeNet:    spec.Behavior.LinuxOptimizeNet,
+		LinuxDNSFix:         spec.Behavior.LinuxDNSFix,
+		LinuxRouter:         spec.Behavior.LinuxRouter,
+		LinuxNoAutoOptimize: spec.Behavior.LinuxNoAutoOptimize,
 	}
 
 	res, err := provision.ByTransport(log, spec.Transport, opt, "", "")
@@ -150,6 +154,9 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	infRun := runtimeenv.Detect()
 	serviceAfterProvision := !spec.Behavior.Portable && transportInstallsOSService(spec.Transport) && !infRun.LikelyContainer
 	if serviceAfterProvision {
+		if runtime.GOOS == "linux" {
+			installer.EvaluateLinuxAutopilot(&opt)
+		}
 		PrintResult(spec, res)
 		if err := svcinstall.InstallRunTransportService(spec.Transport, opt, elevate.IsAdmin()); err != nil {
 			return err
@@ -443,8 +450,8 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 			fmt.Printf("  %sHandshake needs UDP/%d reachable from the client: allow it in the cloud provider firewall/security group and on the host (tunnelbypass opens rules when run as root).%s\n", uicolors.ColorGray, spec.Port, uicolors.ColorReset)
 			fmt.Printf("  %sIf you changed keys or re-ran the wizard, re-import the new client config on every device.%s\n", uicolors.ColorGray, uicolors.ColorReset)
 		}
-		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-			fmt.Printf("  %sServer check: run `wg show` (interface may be wg_server on Linux or utun*/wg* on macOS) — if handshakes fail, peer rx/last handshake stay empty.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		if runtime.GOOS == "linux" {
+			fmt.Printf("  %sServer check: run `wg show` (interface is often wg_server) — if handshakes fail, peer rx/last handshake stay empty.%s\n", uicolors.ColorGray, uicolors.ColorReset)
 		}
 		fmt.Printf("\n  %s[ SCAN FOR MOBILE APPS ]%s\n", uicolors.ColorYellow, uicolors.ColorReset)
 		fmt.Printf("  %sScan WG QR from your app if you generated one under configs/wireguard.%s\n", uicolors.ColorGray, uicolors.ColorReset)

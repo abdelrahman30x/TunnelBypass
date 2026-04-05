@@ -49,6 +49,11 @@ type RunSpec struct {
 		GenerateOnly bool `json:"generate_only"`
 		// NoElevate skips UAC/sudo auto-elevation for OS service + firewall path (user-mode only).
 		NoElevate bool `json:"no_elevate"`
+		// Linux adaptive stack (server install): sysctl/MSS/NAT; see core/installer/linux_transit.go.
+		LinuxOptimizeNet    bool `json:"linux_optimize_net,omitempty"`
+		LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
+		LinuxRouter         bool `json:"linux_router,omitempty"`
+		LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
 	} `json:"behavior"`
 
 	Paths struct {
@@ -124,6 +129,18 @@ func Merge(base, override RunSpec) RunSpec {
 	}
 	if override.Behavior.NoElevate {
 		out.Behavior.NoElevate = true
+	}
+	if override.Behavior.LinuxOptimizeNet {
+		out.Behavior.LinuxOptimizeNet = true
+	}
+	if override.Behavior.LinuxDNSFix {
+		out.Behavior.LinuxDNSFix = true
+	}
+	if override.Behavior.LinuxRouter {
+		out.Behavior.LinuxRouter = true
+	}
+	if override.Behavior.LinuxNoAutoOptimize {
+		out.Behavior.LinuxNoAutoOptimize = true
 	}
 	if strings.TrimSpace(override.Paths.DataDir) != "" {
 		out.Paths.DataDir = strings.TrimSpace(override.Paths.DataDir)

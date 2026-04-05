@@ -268,7 +268,8 @@ detect_remote_system() {
             mapped_os="linux"
             ;;
         Darwin)
-            mapped_os="darwin"
+            log_error "Remote macOS is not supported as a TunnelBypass server host; use Linux or Windows."
+            exit 1
             ;;
         CYGWIN*|MINGW*|MSYS*)
             mapped_os="windows"

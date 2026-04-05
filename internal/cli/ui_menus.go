@@ -15,6 +15,7 @@ import (
 	"tunnelbypass/core/transports/hysteria"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
+	"tunnelbypass/core/types"
 	"tunnelbypass/tools/host_catalog"
 )
 
@@ -271,12 +272,12 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				continue
 			}
 			if strings.Contains(sName, "Hysteria") {
-				_ = hysteria.InstallHysteriaService(sName, filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), 443)
+				_ = hysteria.InstallHysteriaService(sName, filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), 443, types.ConfigOptions{})
 			} else if strings.Contains(sName, "WireGuard") {
-				_ = wireguard.InstallWireGuardService(sName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820)
+				_ = wireguard.InstallWireGuardService(sName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820, types.ConfigOptions{})
 			} else {
 				cfgPath, port := xrayServiceConfigPathAndPort(sName)
-				_ = vless.InstallXrayService(sName, cfgPath, port)
+				_ = vless.InstallXrayService(sName, cfgPath, port, types.ConfigOptions{})
 			}
 		case "5":
 			sName := selectInstalledService(reader, findInstalledServices(), "Choose service to uninstall")
@@ -408,16 +409,16 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			if tr == transportHysteria {
 				_ = hysteria.UninstallHysteriaService(serviceName)
 				time.Sleep(1 * time.Second)
-				_ = hysteria.InstallHysteriaService(serviceName, filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), 443)
+				_ = hysteria.InstallHysteriaService(serviceName, filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), 443, types.ConfigOptions{})
 			} else if tr == transportWireGuard {
 				_ = wireguard.UninstallWireGuardService(serviceName)
 				time.Sleep(1 * time.Second)
-				_ = wireguard.InstallWireGuardService(serviceName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820)
+				_ = wireguard.InstallWireGuardService(serviceName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820, types.ConfigOptions{})
 			} else {
 				_ = vless.UninstallXrayService(serviceName)
 				time.Sleep(1 * time.Second)
 				cfgPath, port := xrayServiceConfigPathAndPort(serviceName)
-				_ = vless.InstallXrayService(serviceName, cfgPath, port)
+				_ = vless.InstallXrayService(serviceName, cfgPath, port, types.ConfigOptions{})
 			}
 			fmt.Printf("    %s✓ Service Restarted.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
@@ -536,9 +537,6 @@ func showServiceStatus(name string) {
 	fmt.Printf("\n    %sNote:%s Open these files to view logs (not printed in CMD).\n", ColorGray, ColorReset)
 	if runtime.GOOS == "linux" {
 		fmt.Printf("    %sLinux systemd:%s View logs using `journalctl -f -u %s`\n", ColorYellow, ColorReset, name)
-	}
-	if runtime.GOOS == "darwin" {
-		fmt.Printf("    %smacOS:%s Use Console.app or `log show --last 1h --style syslog` for system logs; TunnelBypass lines are in the files above.\n", ColorYellow, ColorReset)
 	}
 }
 

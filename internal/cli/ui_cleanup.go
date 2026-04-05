@@ -101,6 +101,15 @@ func freshSetupCleanup(serviceName string) error {
 		_ = exec.Command("taskkill", "/F", "/IM", "wstunnel.exe").Run()
 		_ = exec.Command("taskkill", "/F", "/IM", "stunnel.exe").Run()
 	} else {
+		// Global sysctl/iptables rollback must not run while another TunnelBypass OS service still
+		// exists (Last Standing Man). Only after removing a service do we check remaining units.
+		if strings.TrimSpace(serviceName) != "" {
+			if installer.RemainingTunnelBypassSystemdUnitCount() == 0 {
+				installer.RunLinuxRollback()
+			} else {
+				fmt.Fprintf(os.Stderr, "[*] Other TunnelBypass OS services remain; skipping global network rollback (sysctl/iptables).\n")
+			}
+		}
 		_ = exec.Command("pkill", "-9", "xray").Run()
 		_ = exec.Command("pkill", "-9", "hysteria").Run()
 		_ = exec.Command("pkill", "-9", "wstunnel").Run()

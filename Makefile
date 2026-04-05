@@ -8,7 +8,7 @@ CMD_PKG := ./cmd
 build:
 	go build -o $(BINARY_NAME) $(CMD_PKG)
 
-# Cross-compile Windows amd64 from Linux/macOS/Git-Bash:
+# Cross-compile Windows amd64 from Linux or Git Bash on Windows:
 build-windows:
 	GOOS=windows GOARCH=amd64 go build -o $(BINARY_NAME).exe $(CMD_PKG)
 

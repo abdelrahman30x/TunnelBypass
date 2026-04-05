@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,11 +38,8 @@ func RestartSSHD() error {
 	if runtime.GOOS == "windows" {
 		return exec.Command("powershell", "-Command", "Restart-Service sshd -ErrorAction SilentlyContinue").Run()
 	}
-	if runtime.GOOS == "darwin" {
-		// macOS has no systemd; reload OpenSSH if running (HUP) or kick the system service.
-		_ = exec.Command("killall", "-HUP", "sshd").Run()
-		_ = exec.Command("launchctl", "kickstart", "-k", "system/com.openssh.sshd").Run()
-		return nil
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("RestartSSHD is only implemented for Linux and Windows")
 	}
 	_ = exec.Command("systemctl", "restart", "ssh").Run()
 	return exec.Command("systemctl", "restart", "sshd").Run()

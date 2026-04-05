@@ -154,49 +154,6 @@ func uninstallAllServices(services []string) {
 	}
 }
 
-// darwinLaunchctlMatch is a best-effort check against `launchctl list` for jobs whose label contains name
-// (e.g. third-party LaunchAgents). UserSupervisor-only installs may not appear here.
-func darwinLaunchctlMatch(name string) (exists, running bool) {
-	if runtime.GOOS != "darwin" {
-		return false, false
-	}
-	needle := strings.TrimSpace(name)
-	if needle == "" {
-		return false, false
-	}
-	if _, err := exec.LookPath("launchctl"); err != nil {
-		return false, false
-	}
-	out, err := exec.Command("launchctl", "list").CombinedOutput()
-	if err != nil {
-		return false, false
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "PID") {
-			continue
-		}
-		// Tab-separated: PID, status, label (avoids false positives vs substring in other columns).
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		pidStr := strings.TrimSpace(parts[0])
-		label := strings.TrimSpace(parts[2])
-		if !strings.Contains(label, needle) {
-			continue
-		}
-		exists = true
-		if pidStr != "-" && pidStr != "" {
-			if pid, err := strconv.Atoi(pidStr); err == nil && pid > 0 {
-				running = true
-			}
-		}
-		return exists, running
-	}
-	return false, false
-}
-
 func serviceExists(name string) bool {
 	if name == "" {
 		return false
@@ -221,10 +178,6 @@ func serviceExists(name string) bool {
 		out, _ := exec.Command("systemctl", "show", "-p", "LoadState", name).CombinedOutput()
 		return strings.Contains(string(out), "LoadState=loaded")
 	}
-	if runtime.GOOS == "darwin" {
-		ex, _ := darwinLaunchctlMatch(name)
-		return ex
-	}
 	return false
 }
 
@@ -244,10 +197,6 @@ func serviceRunning(name string) bool {
 	}
 	if runtime.GOOS == "linux" {
 		return exec.Command("systemctl", "is-active", "--quiet", name).Run() == nil
-	}
-	if runtime.GOOS == "darwin" {
-		_, run := darwinLaunchctlMatch(name)
-		return run
 	}
 	return false
 }

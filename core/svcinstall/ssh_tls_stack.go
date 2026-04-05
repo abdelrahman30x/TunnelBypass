@@ -51,7 +51,7 @@ func installSshTlsStack(opt types.ConfigOptions, isAdmin bool) error {
 	}
 
 	cfg := filepath.Join(installer.GetConfigDir("ssh-tls"), "server.json")
-	if err := vless.InstallXrayService("TunnelBypass-SSH-TLS", cfg, port); err != nil {
+	if err := vless.InstallXrayService("TunnelBypass-SSH-TLS", cfg, port, opt); err != nil {
 		return fmt.Errorf("xray ssh-tls: %w", err)
 	}
 	return nil

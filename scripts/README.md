@@ -2,7 +2,7 @@
 
 ## Install from GitHub (local machine)
 
-- **Linux / macOS:** `curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash`
+- **Linux:** `curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash`
 - **Windows (PowerShell):** `irm https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.ps1 | iex`
 
 See the root [README.md](../README.md) **Direct download** section for `INSTALL_PREFIX` / `INSTALL_VERSION` and asset naming.
@@ -13,19 +13,19 @@ Automated deployment scripts for TunnelBypass that detect remote server OS/archi
 
 ## Features
 
-- ✅ **Auto-detect** remote OS (Linux, macOS, Windows) and architecture (amd64, arm64, arm)
+- ✅ **Auto-detect** remote OS (Linux, Windows) and architecture (amd64, arm64, arm)
 - ✅ **Select correct binary** from release files automatically
 - ✅ **Support password and SSH key** authentication
 - ✅ **Upload, install, and restart services** in one command
 - ✅ **Validate installation** after deployment
 - ✅ **Dry-run mode** to preview changes
-- ✅ **Cross-platform** - works from Linux, macOS, or Windows
+- ✅ **Cross-platform** - run the deploy script from Linux, Windows PowerShell, or WSL
 
 ## Quick Start
 
 ### Prerequisites
 
-**Linux/macOS:**
+**Linux (or WSL):**
 ```bash
 # Install sshpass for password authentication (optional)
 # Ubuntu/Debian:
@@ -33,9 +33,6 @@ sudo apt-get install sshpass
 
 # CentOS/RHEL:
 sudo yum install sshpass
-
-# macOS:
-brew install hudochenkov/sshpass/sshpass
 ```
 
 **Windows:**
@@ -46,7 +43,7 @@ brew install hudochenkov/sshpass/sshpass
 ### Deploy with SSH Key (Recommended)
 
 ```bash
-# Linux/macOS
+# Linux / WSL / Git Bash
 ./deploy.sh -H server.example.com -u root -i ~/.ssh/id_rsa
 
 # Windows PowerShell
@@ -56,7 +53,7 @@ brew install hudochenkov/sshpass/sshpass
 ### Deploy with Password
 
 ```bash
-# Linux/macOS
+# Linux / WSL / Git Bash
 ./deploy.sh -H 192.168.1.100 -u admin -p mypassword
 
 # Windows PowerShell (interactive password recommended)
@@ -65,7 +62,7 @@ brew install hudochenkov/sshpass/sshpass
 
 ## Usage
 
-### Linux/macOS Script (deploy.sh)
+### Bash script (deploy.sh)
 
 ```
 Usage: ./deploy.sh [OPTIONS]
@@ -156,14 +153,13 @@ $pass = Read-Host -AsSecureString "Enter password"
 ```
 1. Connect via SSH
    ↓
-2. Run: uname -s (gets OS: Linux, Darwin)
+2. Run: uname -s (expects Linux or Windows family on the server)
    Run: uname -m (gets Arch: x86_64, aarch64)
    ↓
 3. Map to release naming:
    Linux + x86_64   → linux_amd64
    Linux + aarch64  → linux_arm64
-   Darwin + x86_64  → darwin_amd64
-   Darwin + arm64   → darwin_arm64
+   (Remote macOS is rejected — use a Linux or Windows server.)
    ↓
 4. Select file: tunnelbypass_v1.2.1_linux_amd64.tar.gz
    ↓
@@ -190,7 +186,6 @@ $pass = Read-Host -AsSecureString "Enter password"
 | Remote `uname -s` | Release Prefix |
 |-------------------|----------------|
 | Linux             | linux          |
-| Darwin            | darwin         |
 | CYGWIN, MINGW     | windows        |
 
 ## Release File Structure
@@ -202,8 +197,6 @@ releases/
 ├── tunnelbypass_v1.2.1_linux_amd64.tar.gz
 ├── tunnelbypass_v1.2.1_linux_arm64.tar.gz
 ├── tunnelbypass_v1.2.1_linux_arm.tar.gz
-├── tunnelbypass_v1.2.1_darwin_amd64.tar.gz
-├── tunnelbypass_v1.2.1_darwin_arm64.tar.gz
 └── tunnelbypass_v1.2.1_windows_amd64.exe
 ```
 
@@ -268,7 +261,7 @@ ls -la releases/
 ### Unsupported OS/Architecture
 
 The script supports:
-- **OS**: Linux, macOS (Darwin), Windows
+- **Remote OS**: Linux, Windows (remote macOS servers are not supported)
 - **Arch**: x86_64/amd64, aarch64/arm64, armv7l, i386/i686
 
 For unsupported systems, manually build and deploy.

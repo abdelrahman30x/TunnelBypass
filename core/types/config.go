@@ -21,6 +21,12 @@ type ConfigOptions struct {
 	SSHWelcomeMessage string `json:"ssh_welcome_message"`
 	SSHIsAdmin        bool   `json:"ssh_is_admin"`
 	SSHBackendPort    int    `json:"ssh_backend_port"`
+
+	// Linux server install: adaptive networking (see ApplyLinuxTransitNetworking).
+	LinuxOptimizeNet    bool `json:"linux_optimize_net,omitempty"`
+	LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
+	LinuxRouter         bool `json:"linux_router,omitempty"`
+	LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
 }
 
 // XrayServerConfig is used for parsing server-side configuration

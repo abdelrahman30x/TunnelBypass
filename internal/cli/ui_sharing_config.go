@@ -456,7 +456,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 			fmt.Printf("    %s✓ Added '%s' to tunnel host list.%s\n", ColorGreen, newSni, ColorReset)
 		}
 		fmt.Println("    [*] Restarting tunnel service...")
-		_ = hysteria.InstallHysteriaService(sName, configPath, readListenPort(configPath, 443))
+		_ = hysteria.InstallHysteriaService(sName, configPath, readListenPort(configPath, 443), types.ConfigOptions{})
 		printConfiguredTunnelHostnames(sName)
 		return
 	}
@@ -537,7 +537,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		fmt.Printf("    %s✓ Added '%s' to server host list and sharing links.%s\n", ColorGreen, newSni, ColorReset)
 	}
 	fmt.Println("    [*] Restarting tunnel service...")
-	_ = vless.InstallXrayService(sName, configPath, readInboundPort(cfg, 443))
+	_ = vless.InstallXrayService(sName, configPath, readInboundPort(cfg, 443), types.ConfigOptions{})
 	printConfiguredTunnelHostnames(sName)
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TunnelBypass one-line installer for Linux and macOS.
+# TunnelBypass one-line installer for Linux (servers).
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 # Default: latest published GitHub release (no version required).
@@ -40,9 +40,8 @@ esac
 
 case "$OS" in
   linux) OS_GO="linux" ;;
-  darwin) OS_GO="darwin" ;;
   *)
-    say "error: unsupported OS: $OS (this script supports Linux and macOS)" >&2
+    say "error: unsupported OS: $OS (this script supports Linux only; build from source for other platforms)" >&2
     exit 1
     ;;
 esac

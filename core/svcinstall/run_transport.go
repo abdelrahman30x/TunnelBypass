@@ -23,21 +23,21 @@ func InstallRunTransportService(transport string, opt types.ConfigOptions, isAdm
 	switch t {
 	case "reality", "vless":
 		cfg := filepath.Join(installer.GetConfigDir("vless"), "server.json")
-		return vless.InstallXrayService("TunnelBypass-VLESS", cfg, opt.Port)
+		return vless.InstallXrayService("TunnelBypass-VLESS", cfg, opt.Port, opt)
 	case "vless-ws":
 		cfg := filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
-		return vless.InstallXrayService("TunnelBypass-VLESS-WS", cfg, opt.Port)
+		return vless.InstallXrayService("TunnelBypass-VLESS-WS", cfg, opt.Port, opt)
 	case "vless-grpc":
 		cfg := filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
-		return vless.InstallXrayService("TunnelBypass-VLESS-GRPC", cfg, opt.Port)
+		return vless.InstallXrayService("TunnelBypass-VLESS-GRPC", cfg, opt.Port, opt)
 	case "ssh-tls":
 		return installSshTlsStack(opt, isAdmin)
 	case "hysteria":
 		cfg := filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml")
-		return hysteria.InstallHysteriaService("TunnelBypass-Hysteria", cfg, opt.Port)
+		return hysteria.InstallHysteriaService("TunnelBypass-Hysteria", cfg, opt.Port, opt)
 	case "wireguard":
 		cfg := filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf")
-		return wireguard.InstallWireGuardService("TunnelBypass-WireGuard", cfg, opt.Port)
+		return wireguard.InstallWireGuardService("TunnelBypass-WireGuard", cfg, opt.Port, opt)
 	case "wss":
 		u := strings.TrimSpace(opt.SSHUser)
 		pw := strings.TrimSpace(opt.SSHPassword)

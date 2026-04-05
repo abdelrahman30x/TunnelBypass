@@ -32,8 +32,6 @@ func Probe() ProbeResult {
 		p.Root = os.Geteuid() == 0
 	case "windows":
 		p.Root = isWindowsAdmin()
-	case "darwin":
-		p.Root = os.Geteuid() == 0
 	default:
 		p.Root = os.Geteuid() == 0
 	}

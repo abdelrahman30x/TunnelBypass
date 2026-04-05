@@ -571,7 +571,7 @@ func installSSHServiceAsStandalone(username, password string, installForwarder b
 }
 
 // installSSHServiceAsStandaloneGeneric registers TunnelBypass-SSH via the portable service stack
-// (same mechanism as other transports on Windows and macOS).
+// (same mechanism as other transports on Windows and Linux).
 func installSSHServiceAsStandaloneGeneric(username, password string, installForwarder bool, externalUDPGW bool, udpgwPort int) error {
 	cfg, err := ensureSSHPortConfig(username, installForwarder)
 	if err != nil {

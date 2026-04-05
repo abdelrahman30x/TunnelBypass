@@ -82,9 +82,6 @@ func lookupPortOwner(port int) (proc string, pid int) {
 		}
 		return proc, pid
 	}
-	if runtime.GOOS == "darwin" {
-		return lookupPortOwnerDarwin(port)
-	}
 	// Linux and other Unix: prefer ss (iproute2), then netstat -ltnp (procfs shows pid/cmd).
 	cmd := exec.Command("sh", "-lc", "ss -ltnp '( sport = :"+strconv.Itoa(port)+" )' 2>/dev/null || netstat -ltnp 2>/dev/null | grep :"+strconv.Itoa(port))
 	out, err := cmd.Output()
@@ -127,42 +124,6 @@ func lookupPortOwner(port int) (proc string, pid int) {
 		}
 	}
 	return proc, pid
-}
-
-// lookupPortOwnerDarwin uses lsof (ships with macOS). ss/iproute2 and Linux netstat -p are absent by default.
-func lookupPortOwnerDarwin(port int) (proc string, pid int) {
-	if port <= 0 || port > 65535 {
-		return "", 0
-	}
-	if _, err := exec.LookPath("lsof"); err != nil {
-		return "", 0
-	}
-	cmd := exec.Command("lsof", "-nP", "-sTCP:LISTEN", fmt.Sprintf("-iTCP:%d", port))
-	out, err := cmd.Output()
-	if err != nil || len(out) == 0 {
-		return "", 0
-	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) < 2 {
-		return "", 0
-	}
-	for _, line := range lines[1:] {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		f := strings.Fields(line)
-		if len(f) < 2 {
-			continue
-		}
-		proc = f[0]
-		p, err := strconv.Atoi(f[1])
-		if err != nil || p <= 0 {
-			continue
-		}
-		return proc, p
-	}
-	return "", 0
 }
 
 func runningTransportOnPort(port int) (string, bool) {
@@ -250,8 +211,6 @@ func osStopServiceHint(serviceName string) string {
 		return fmt.Sprintf("[+] Stop the background service manually (Administrator cmd):\n     sc stop %s", serviceName)
 	case "linux":
 		return fmt.Sprintf("[+] Stop the background service manually (if using systemd):\n     sudo systemctl stop %s", serviceName)
-	case "darwin":
-		return "[+] Stop the background service manually (Activity Monitor or launchctl), then retry."
 	default:
 		return fmt.Sprintf("[+] Stop the service %q using your OS service manager, then retry.", serviceName)
 	}
@@ -261,8 +220,6 @@ func portInspectHint(port int) string {
 	switch runtime.GOOS {
 	case "windows":
 		return "[+] Inspect who owns this port:\nnetstat -ano | findstr :" + strconv.Itoa(port)
-	case "darwin":
-		return "[+] Inspect who owns this port:\nlsof -nP -iTCP:" + strconv.Itoa(port) + " -sTCP:LISTEN"
 	default:
 		return "[+] Inspect who owns this port:\nss -lntp | grep ':" + strconv.Itoa(port) + " ' || netstat -lntp 2>/dev/null | grep ':" + strconv.Itoa(port) + "'"
 	}

@@ -52,4 +52,16 @@ func ApplySpecFileToRunSpec(rspec *RunSpec, f SpecFile) {
 	if f.AutoStart {
 		rspec.Behavior.AutoStart = true
 	}
+	if f.LinuxOptimizeNet {
+		rspec.Behavior.LinuxOptimizeNet = true
+	}
+	if f.LinuxDNSFix {
+		rspec.Behavior.LinuxDNSFix = true
+	}
+	if f.LinuxRouter {
+		rspec.Behavior.LinuxRouter = true
+	}
+	if f.LinuxNoAutoOptimize {
+		rspec.Behavior.LinuxNoAutoOptimize = true
+	}
 }

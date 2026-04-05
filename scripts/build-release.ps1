@@ -29,9 +29,7 @@ $Targets = @(
     @{ OS = "linux"; Arch = "amd64"; Ext = "" },
     @{ OS = "linux"; Arch = "arm64"; Ext = "" },
     @{ OS = "windows"; Arch = "amd64"; Ext = ".exe" },
-    @{ OS = "windows"; Arch = "arm64"; Ext = ".exe" },
-    @{ OS = "darwin"; Arch = "amd64"; Ext = "" },
-    @{ OS = "darwin"; Arch = "arm64"; Ext = "" }
+    @{ OS = "windows"; Arch = "arm64"; Ext = ".exe" }
 )
 
 foreach ($t in $Targets) {

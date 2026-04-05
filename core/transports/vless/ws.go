@@ -95,7 +95,9 @@ func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 						},
 					},
 					"wsSettings": map[string]interface{}{
-						"path": wsPath,
+						"path":            wsPath,
+						"readBufferSize":  65536,
+						"writeBufferSize": 65536,
 					},
 					"sockopt": map[string]interface{}{
 						"tcpNoDelay":  true,
@@ -141,6 +143,8 @@ func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 			},
 		},
 	}
+
+	MergeXrayDNSIntoConfig(config)
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -199,7 +203,9 @@ func GenerateVlessWSClientConfig(opt types.ConfigOptions) (string, error) {
 				"fingerprint":   "chrome",
 			},
 			"wsSettings": map[string]interface{}{
-				"path": wsPath,
+				"path":            wsPath,
+				"readBufferSize":  65536,
+				"writeBufferSize": 65536,
 				"headers": map[string]interface{}{
 					"Host": sni,
 				},

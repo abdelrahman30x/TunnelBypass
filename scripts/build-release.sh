@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and package release assets into ./build/<version>/ (Linux, macOS, or Git Bash on Windows).
+# Build and package release assets into ./build/<version>/ (Linux and Windows; run from Git Bash on Windows if needed).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,8 +62,6 @@ build_one linux amd64 ""
 build_one linux arm64 ""
 build_one windows amd64 ".exe"
 build_one windows arm64 ".exe"
-build_one darwin amd64 ""
-build_one darwin arm64 ""
 
 echo "=================="
 echo "All release assets created successfully:"

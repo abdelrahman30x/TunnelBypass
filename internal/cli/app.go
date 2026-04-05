@@ -26,7 +26,7 @@ import (
 	"tunnelbypass/tools/host_catalog"
 )
 
-var version = "v1.3.0"
+var version = "v1.3.2"
 
 // SetVersion sets the user-visible release string before Main (from cmd, or tests).
 func SetVersion(v string) {
@@ -45,10 +45,10 @@ func getDefaultConfigPath() string {
 }
 
 var (
-	configFlag    = flag.String("config", getDefaultConfigPath(), "Path to config file")
-	verReq        = flag.Bool("version", false, "Show version")
-	udpgwPort     = flag.Int("udpgw-port", 7300, "UDPGW listen port")
-	debugFlag     = flag.Bool("debug", false, "Verbose log output")
+	configFlag      = flag.String("config", getDefaultConfigPath(), "Path to config file")
+	verReq          = flag.Bool("version", false, "Show version")
+	udpgwPort       = flag.Int("udpgw-port", 7300, "UDPGW listen port")
+	debugFlag       = flag.Bool("debug", false, "Verbose log output")
 	forwarderListen = flag.String("listen", "127.0.0.1:0", "Forwarder listen address (0 = dynamic allocation)")
 	forwarderTarget = flag.String("target", "127.0.0.1:0", "Forwarder target address")
 )
@@ -102,7 +102,7 @@ func Main() {
 	}
 	if subcommandIndex("health") >= 0 || subcommandIndex("status") >= 0 {
 		tblog.Init()
-		health.Report(os.Stdout)
+		health.Report(os.Stdout, health.PingCheckRequested(os.Args))
 		return
 	}
 
@@ -300,7 +300,7 @@ func printUsage() {
 	fmt.Println("  generate - Generate configs only (same engine as run)")
 	fmt.Println("  deps-tree - Show portable transport dependency graph (--mermaid for flowchart)")
 	fmt.Println("  uninstall - Remove an OS service and TunnelBypass configs (--service or --type; --data-dir; --yes)")
-	fmt.Println("  status  - Local health snapshot (pid files, common ports)")
+	fmt.Println("  status  - Local health snapshot (pid files, common ports); add --ping-check for 1.1.1.1 latency")
 	fmt.Println("  health  - Same as status")
 	fmt.Println("\nFlags:")
 	flag.PrintDefaults()

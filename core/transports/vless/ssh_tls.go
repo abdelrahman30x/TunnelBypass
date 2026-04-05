@@ -229,6 +229,8 @@ func GenerateVlessSSHDirectTLSServerConfig(opt types.ConfigOptions, sshFallbackD
 		},
 	}
 
+	MergeXrayDNSIntoConfig(config)
+
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return "", err

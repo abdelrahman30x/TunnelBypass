@@ -48,6 +48,11 @@ type SpecFile struct {
 	Provision      bool `json:"provision,omitempty" yaml:"provision,omitempty"`
 	SkipProvision  bool `json:"skip_provision,omitempty" yaml:"skip_provision,omitempty"`
 	AutoStart      bool `json:"auto_start,omitempty" yaml:"auto_start,omitempty"`
+
+	LinuxOptimizeNet    bool `json:"linux_optimize_net,omitempty" yaml:"linux_optimize_net,omitempty"`
+	LinuxDNSFix         bool `json:"linux_dns_fix,omitempty" yaml:"linux_dns_fix,omitempty"`
+	LinuxRouter         bool `json:"linux_router,omitempty" yaml:"linux_router,omitempty"`
+	LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty" yaml:"linux_no_auto_optimize,omitempty"`
 }
 
 func LoadSpec(path string) (SpecFile, error) {
@@ -203,6 +208,10 @@ func SpecToConfigOptions(transport string, f SpecFile) types.ConfigOptions {
 		SSHUser:           strings.TrimSpace(f.SSHUser),
 		SSHPassword:       strings.TrimSpace(f.SSHPassword),
 		SSHWelcomeMessage: "",
+		LinuxOptimizeNet:    f.LinuxOptimizeNet,
+		LinuxDNSFix:         f.LinuxDNSFix,
+		LinuxRouter:         f.LinuxRouter,
+		LinuxNoAutoOptimize: f.LinuxNoAutoOptimize,
 	}
 }
 

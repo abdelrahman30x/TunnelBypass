@@ -132,7 +132,8 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 				},
 				"streamSettings": map[string]interface{}{
 					"sockopt": map[string]interface{}{
-						"tcpNoDelay": true,
+						"tcpNoDelay":  true,
+						"tcpFastOpen": true,
 					},
 				},
 			},
@@ -176,6 +177,8 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 			},
 		},
 	}
+
+	MergeXrayDNSIntoConfig(config)
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

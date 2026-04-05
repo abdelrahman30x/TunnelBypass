@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 )
 
@@ -36,9 +37,9 @@ func tunnelNameFromConfigPath(configPath string) string {
 	return base
 }
 
-func InstallWireGuardService(serviceName, configPath string, port int) error {
+func InstallWireGuardService(serviceName, configPath string, port int, opt types.ConfigOptions) error {
 	if runtime.GOOS == "linux" {
-		return installWireGuardLinux(serviceName, configPath, port)
+		return installWireGuardLinux(serviceName, configPath, port, opt)
 	}
 	if runtime.GOOS == "windows" {
 		return installWireGuardWindows(serviceName, configPath, port)
@@ -114,7 +115,7 @@ func copyFile(src, dst string, perm fs.FileMode) error {
 	return nil
 }
 
-func installWireGuardLinux(serviceName, configPath string, port int) error {
+func installWireGuardLinux(serviceName, configPath string, port int, opt types.ConfigOptions) error {
 	absConfig, _ := filepath.Abs(configPath)
 	tunnelName := tunnelNameFromConfigPath(absConfig)
 	targetCfg := filepath.Join("/etc/wireguard", tunnelName+".conf")
@@ -147,7 +148,10 @@ func installWireGuardLinux(serviceName, configPath string, port int) error {
 		_ = writeLinuxWGState(linuxWGState{Mode: "wg-quick", TunnelName: tunnelName})
 	}
 
-	_ = installer.ApplyLinuxTransitNetworking()
+	if err := installer.ApplyLinuxTransitNetworking(opt); err != nil {
+		installer.RunLinuxRollback()
+		return err
+	}
 
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "udp", serviceName)

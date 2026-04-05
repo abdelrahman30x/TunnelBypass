@@ -44,7 +44,7 @@ func executeRun(rawArgs []string) int {
 		fs.PrintDefaults()
 	}
 
-	portableF := fs.Bool("portable", false, "Per-user data directory (Windows: LocalAppData; macOS: Application Support; Linux: XDG); same as placing the word portable in args")
+	portableF := fs.Bool("portable", false, "Per-user data directory (Windows: LocalAppData; Linux/Unix: XDG or ~/.local/share); same as placing the word portable in args")
 	systemData := fs.Bool("system-data", false, "Keep system-wide data directory (default for run; explicit no-op unless combined with --portable)")
 	dataDir := fs.String("data-dir", "", "Data root for configs, binaries, logs, and run/")
 	daemon := fs.Bool("daemon", false, "Restart transport on exit until interrupted")
@@ -64,6 +64,10 @@ func executeRun(rawArgs []string) int {
 	noElevate := fs.Bool("no-elevate", false, "Do not auto-elevate to Administrator/root for OS service install and firewall (user-mode only)")
 	autoStart := fs.Bool("auto-start", true, "Start transport after generation")
 	externalUDPGW := fs.Bool("external-udpgw", false, "For ssh: UDPGW is already running (e.g. TunnelBypass-UDPGW service); do not start in-process UDPGW")
+	linuxOptimize := fs.Bool("optimize-net", false, "Linux: sysctl + TB_* MSS clamp + optional gai (TUNNELBYPASS_LINUX_GAI=1)")
+	linuxDNSFix := fs.Bool("dns-fix", false, "Linux: if system DNS fails, adjust resolv/resolvectl (app-level DNS is always in generated configs)")
+	linuxRouter := fs.Bool("router", false, "Linux: NAT/MASQUERADE on egress iface only (requires TB_* chains; not default)")
+	linuxNoAutoJitter := fs.Bool("no-auto-optimize", false, "Linux: do not auto-enable optimize-net from RTT jitter probe")
 
 	argsForFs, portableWord := stripPortableToken(rawArgs)
 	_ = fs.Parse(argsForFs)
@@ -178,6 +182,18 @@ func executeRun(rawArgs []string) int {
 	}
 	if strings.TrimSpace(*logsDirFlag) != "" {
 		rspec.Paths.LogsDir = strings.TrimSpace(*logsDirFlag)
+	}
+	if *linuxOptimize {
+		rspec.Behavior.LinuxOptimizeNet = true
+	}
+	if *linuxDNSFix {
+		rspec.Behavior.LinuxDNSFix = true
+	}
+	if *linuxRouter {
+		rspec.Behavior.LinuxRouter = true
+	}
+	if *linuxNoAutoJitter {
+		rspec.Behavior.LinuxNoAutoOptimize = true
 	}
 
 	nc := notifyContext()

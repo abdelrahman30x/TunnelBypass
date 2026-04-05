@@ -3,11 +3,13 @@ package vless
 import (
 	"fmt"
 	"path/filepath"
+
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/types"
 )
 
 // InstallXrayService installs XRay via the TunnelBypass service wrapper
-func InstallXrayService(serviceName, configPath string, port int) error {
+func InstallXrayService(serviceName, configPath string, port int, opt types.ConfigOptions) error {
 	xrayPath, err := installer.EnsureBinary("xray")
 	if err != nil {
 		return err
@@ -28,7 +30,10 @@ func InstallXrayService(serviceName, configPath string, port int) error {
 		return fmt.Errorf("failed to create xray service: %v", err)
 	}
 
-	_ = installer.ApplyLinuxTransitNetworking()
+	if err := installer.ApplyLinuxTransitNetworking(opt); err != nil {
+		installer.RunLinuxRollback()
+		return err
+	}
 
 	if port > 0 {
 		_ = installer.OpenFirewallPort(port, "tcp", serviceName)
