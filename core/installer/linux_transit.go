@@ -44,7 +44,7 @@ import (
 
 const (
 	linuxTransitSysctlPath = "/etc/sysctl.d/99-tunnelbypass.conf"
-	linuxTransitSysctlBody = `# TunnelBypass v1.3.2 — transit / gaming-friendly sysctl (drop-in; do not edit /etc/sysctl.conf).
+	linuxTransitSysctlBody = `# TunnelBypass v1.3.3 — transit / gaming-friendly sysctl (drop-in; do not edit /etc/sysctl.conf).
 # Managed idempotently by TunnelBypass; do not flush INPUT from this file.
 net.ipv4.ip_forward=1
 net.ipv6.conf.all.forwarding=1

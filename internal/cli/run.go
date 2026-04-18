@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"tunnelbypass/internal/cfg"
+	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/engine"
+	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/utils"
 )
 
@@ -33,6 +35,15 @@ func stripPortableToken(args []string) (filtered []string, portable bool) {
 }
 
 func executeRun(rawArgs []string) int {
+	for _, a := range rawArgs {
+		if a == "--debug" {
+			debug.Init(true)
+			tblog.ApplyDebug(true)
+			debug.ConfigureLog()
+			break
+		}
+	}
+
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	fs.Usage = func() {
 		out := fs.Output()
@@ -68,8 +79,11 @@ func executeRun(rawArgs []string) int {
 	linuxDNSFix := fs.Bool("dns-fix", false, "Linux: if system DNS fails, adjust resolv/resolvectl (app-level DNS is always in generated configs)")
 	linuxRouter := fs.Bool("router", false, "Linux: NAT/MASQUERADE on egress iface only (requires TB_* chains; not default)")
 	linuxNoAutoJitter := fs.Bool("no-auto-optimize", false, "Linux: do not auto-enable optimize-net from RTT jitter probe")
+	selfHost := fs.Bool("self-host", false, "LAN mode: use local network IP as server endpoint; client and server must be on the same network")
+	lanRelax := fs.Bool("lan-relax", false, "With --self-host: allow tunnel traffic to reach any LAN host (default: restrict private routing in Xray)")
 
 	argsForFs, portableWord := stripPortableToken(rawArgs)
+	argsForFs = reorderRunArgsForFlagParse(argsForFs)
 	_ = fs.Parse(argsForFs)
 	posArgs := fs.Args()
 
@@ -194,6 +208,12 @@ func executeRun(rawArgs []string) int {
 	}
 	if *linuxNoAutoJitter {
 		rspec.Behavior.LinuxNoAutoOptimize = true
+	}
+	if *selfHost {
+		rspec.Behavior.HostMode = "lan"
+		if *lanRelax {
+			rspec.Behavior.LANRelax = true
+		}
 	}
 
 	nc := notifyContext()

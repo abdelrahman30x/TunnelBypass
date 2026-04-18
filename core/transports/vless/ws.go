@@ -10,6 +10,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/types"
+	"tunnelbypass/internal/network"
 	"tunnelbypass/internal/utils"
 	"tunnelbypass/tools/host_catalog"
 )
@@ -126,13 +127,7 @@ func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 		},
 		"routing": map[string]interface{}{
 			"domainStrategy": "IPIfNonMatch",
-			"rules": []interface{}{
-				map[string]interface{}{
-					"type":        "field",
-					"ip":          []string{"geoip:private"},
-					"outboundTag": "block",
-				},
-			},
+			"rules":          network.BuildXrayPrivateRule(opt.NetworkProfile.PrivateRouting()),
 		},
 		"policy": map[string]interface{}{
 			"levels": map[string]interface{}{

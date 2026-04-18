@@ -54,6 +54,9 @@ type RunSpec struct {
 		LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
 		LinuxRouter         bool `json:"linux_router,omitempty"`
 		LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
+		// HostMode is set by CLI/JSON; engine maps to typed network.HostMode ("lan" or "" for internet).
+		HostMode string `json:"host_mode,omitempty"`
+		LANRelax bool   `json:"lan_relax,omitempty"`
 	} `json:"behavior"`
 
 	Paths struct {
@@ -142,6 +145,12 @@ func Merge(base, override RunSpec) RunSpec {
 	if override.Behavior.LinuxNoAutoOptimize {
 		out.Behavior.LinuxNoAutoOptimize = true
 	}
+	if strings.TrimSpace(override.Behavior.HostMode) != "" {
+		out.Behavior.HostMode = strings.TrimSpace(override.Behavior.HostMode)
+	}
+	if override.Behavior.LANRelax {
+		out.Behavior.LANRelax = true
+	}
 	if strings.TrimSpace(override.Paths.DataDir) != "" {
 		out.Paths.DataDir = strings.TrimSpace(override.Paths.DataDir)
 	}
@@ -211,8 +220,11 @@ func FillDefaults(s *RunSpec) {
 	if strings.EqualFold(strings.TrimSpace(s.Auth.UUID), "auto") || strings.TrimSpace(s.Auth.UUID) == "" {
 		s.Auth.UUID = provision.NormalizeUUID(s.Auth.UUID)
 	}
-	if strings.EqualFold(strings.TrimSpace(s.Server.Address), "auto") || strings.TrimSpace(s.Server.Address) == "" {
-		s.Server.Address = provision.ResolveServerAddr(s.Server.Address)
+	isLANMode := strings.EqualFold(strings.TrimSpace(s.Behavior.HostMode), "lan")
+	if !isLANMode {
+		if strings.EqualFold(strings.TrimSpace(s.Server.Address), "auto") || strings.TrimSpace(s.Server.Address) == "" {
+			s.Server.Address = provision.ResolveServerAddr(s.Server.Address)
+		}
 	}
 	if strings.EqualFold(strings.TrimSpace(s.Auth.SSHPass), "auto") || strings.TrimSpace(s.Auth.SSHPass) == "" {
 		s.Auth.SSHPass = installer.ReadOrCreateEmbedSSHPassword()

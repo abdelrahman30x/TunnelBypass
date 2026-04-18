@@ -18,7 +18,9 @@ import (
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
+	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/elevate"
+	"tunnelbypass/internal/network"
 	"tunnelbypass/internal/runtimeenv"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/uicolors"
@@ -78,6 +80,30 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		spec.Behavior.Portable = true
 		spec.Behavior.Daemon = false
 	}
+
+	hostMode, ok := network.ParseHostMode(spec.Behavior.HostMode)
+	if !ok {
+		return fmt.Errorf("invalid host_mode %q; expected 'lan' or '' (internet)", spec.Behavior.HostMode)
+	}
+	secProfile := network.StrictLAN
+	if spec.Behavior.LANRelax {
+		secProfile = network.RelaxedLAN
+	}
+	netProf, err := network.ResolveProfile(network.ProfileOptions{
+		Mode:        hostMode,
+		CLIServer:   strings.TrimSpace(spec.Server.Address),
+		EnvOverride: os.Getenv("TUNNELBYPASS_LAN_IP"),
+		Security:    secProfile,
+		Logger:      tblog.Sub("network"),
+		Trace:       debug.Enabled(),
+	})
+	if err != nil {
+		return fmt.Errorf("network profile: %w", err)
+	}
+	if hostMode == network.LANMode {
+		spec.Server.Address = netProf.PrimaryIP
+	}
+
 	cfg.FillDefaults(&spec)
 	if err := cfg.Validate(spec); err != nil {
 		return err
@@ -134,6 +160,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		LinuxDNSFix:         spec.Behavior.LinuxDNSFix,
 		LinuxRouter:         spec.Behavior.LinuxRouter,
 		LinuxNoAutoOptimize: spec.Behavior.LinuxNoAutoOptimize,
+		NetworkProfile:      netProf,
 	}
 
 	res, err := provision.ByTransport(log, spec.Transport, opt, "", "")
@@ -146,8 +173,19 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		spec.SSH.Port = res.SSHPort
 	}
 
+	lanMode := hostMode == network.LANMode
+	if lanMode {
+		printLANSecurityBanner()
+		if w := network.ValidateReachability(netProf, spec.Transport, spec.Port); w != "" {
+			fmt.Fprintln(os.Stderr, w)
+		}
+		PrintSelfHostSummary(spec, res, netProf)
+	}
+
 	if spec.Behavior.GenerateOnly || !spec.Behavior.AutoStart {
-		PrintResult(spec, res)
+		if !lanMode {
+			PrintResult(spec, res)
+		}
 		return nil
 	}
 
@@ -157,7 +195,9 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		if runtime.GOOS == "linux" {
 			installer.EvaluateLinuxAutopilot(&opt)
 		}
-		PrintResult(spec, res)
+		if !lanMode {
+			PrintResult(spec, res)
+		}
 		if err := svcinstall.InstallRunTransportService(spec.Transport, opt, elevate.IsAdmin()); err != nil {
 			return err
 		}
@@ -189,7 +229,9 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	runOne := func(c context.Context) error {
 		return portable.RunNamed(c, tblog.Sub("run"), cfg.RunnerTransportFor(spec.Transport), pOpts)
 	}
-	PrintResult(spec, res)
+	if !lanMode {
+		PrintResult(spec, res)
+	}
 	if spec.Behavior.Daemon {
 		RunDaemonLoop(ctx, spec.Transport, runOne)
 		return nil
@@ -464,4 +506,46 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 			fmt.Printf("  %s════════════════════════════════════════════════════════════%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
 		}
 	}
+}
+
+func printLANSecurityBanner() {
+	fmt.Fprintln(os.Stderr, "⚠️ LAN SELF-HOST MODE ACTIVE")
+}
+
+// PrintSelfHostSummary prints a single LAN-mode summary after provisioning.
+func PrintSelfHostSummary(spec cfg.RunSpec, res transport.Result, prof network.NetworkProfile) {
+	fmt.Println("\n--- LAN self-host ---")
+	if prof.Security == network.StrictLAN {
+		fmt.Println("Strict LAN (default): Xray-based transports use BlockPrivate — outbound traffic to other private IPs is blocked. Use --lan-relax only if you need full LAN routing.")
+	} else {
+		fmt.Println("Relaxed LAN (--lan-relax): the tunnel may reach any host on your LAN. Use only on isolated, trusted networks.")
+	}
+	fmt.Println()
+	fmt.Printf("Primary IP:    %s\n", prof.PrimaryIP)
+	fmt.Printf("Resolved via:  %s\n", prof.ResolutionSource)
+	if prof.SelectedInterface != "" {
+		fmt.Printf("Interface:     %s\n", prof.SelectedInterface)
+	}
+	fmt.Printf("Transport:     %s\n", spec.Transport)
+	fmt.Printf("Listen port:   %d\n", spec.Port)
+	if strings.TrimSpace(spec.SNI) != "" {
+		fmt.Printf("SNI:           %s\n", spec.SNI)
+	}
+	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss" || spec.Transport == "ssh-tls"
+	if tunnelSSH && spec.SSH.Port > 0 {
+		fmt.Printf("SSH port:      %d\n", spec.SSH.Port)
+	}
+	if res.SharingLink != "" {
+		fmt.Printf("\nSharing link / import:\n%s\n", res.SharingLink)
+	}
+	if res.ServerConfigPath != "" {
+		fmt.Printf("Server config: %s\n", res.ServerConfigPath)
+	}
+	if res.ClientConfigPath != "" {
+		fmt.Printf("Client config: %s\n", res.ClientConfigPath)
+	}
+	if res.InstructionPath != "" {
+		fmt.Printf("Instructions:  %s\n", res.InstructionPath)
+	}
+	fmt.Println("\nReach this server from other LAN devices using the primary IP and port above (same subnet).")
 }

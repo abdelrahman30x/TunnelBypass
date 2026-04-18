@@ -1,5 +1,7 @@
 package types
 
+import "tunnelbypass/internal/network"
+
 type ConfigOptions struct {
 	Transport    string   `json:"transport"`
 	ServerAddr   string   `json:"server"`
@@ -27,6 +29,9 @@ type ConfigOptions struct {
 	LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
 	LinuxRouter         bool `json:"linux_router,omitempty"`
 	LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
+
+	// NetworkProfile is resolved once in engine.Run (read-only for generators).
+	NetworkProfile network.NetworkProfile `json:"-"`
 }
 
 // XrayServerConfig is used for parsing server-side configuration

@@ -8,7 +8,28 @@ import (
 	"tunnelbypass/core/installer"
 	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/types"
+	"tunnelbypass/internal/network"
 )
+
+func lanSelfHostFileHeader(opt types.ConfigOptions) string {
+	if opt.NetworkProfile.Mode != network.LANMode {
+		return ""
+	}
+	p := opt.NetworkProfile
+	iface := strings.TrimSpace(p.SelectedInterface)
+	if iface == "" {
+		iface = "(none)"
+	}
+	return fmt.Sprintf(`# ┌─────────────────────────────────────────────────────┐
+# │  SELF-HOST / LAN MODE                               │
+# │  Server LAN IP  : %s
+# │  Detected via   : %s
+# │  Interface      : %s
+# │  Client and server must be on the same network.     │
+# └─────────────────────────────────────────────────────┘
+#
+`, p.PrimaryIP, p.ResolutionSource, iface)
+}
 
 func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 	configsDir := installer.GetConfigDir("ssh")
@@ -38,7 +59,7 @@ func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {
 		remoteSSH = 22 // Only fallback to 22 if we can't determine the actual port
 	}
 
-	config := fmt.Sprintf(`# SSH Tunnel — Credentials & Client Commands
+	config := lanSelfHostFileHeader(opt) + fmt.Sprintf(`# SSH Tunnel — Credentials & Client Commands
 # Server IP : %s
 # SSH Port   : %d
 # Username   : %s
@@ -103,7 +124,7 @@ func GenerateSSLConfig(opt types.ConfigOptions) (string, error) {
 	}
 
 	firstLine := strings.SplitN(sshWelcome, "\n", 2)[0]
-	config := fmt.Sprintf(`# TunnelBypass SSL (stunnel) - Quick Instructions
+	config := lanSelfHostFileHeader(opt) + fmt.Sprintf(`# TunnelBypass SSL (stunnel) - Quick Instructions
 Server:   %s:%d
 SNI:      %s
 User:     %s
@@ -176,7 +197,7 @@ func GenerateWSSConfig(opt types.ConfigOptions) (string, error) {
 	if strings.TrimSpace(sniForUi) == "" {
 		sniForUi = "(empty)"
 	}
-	config := fmt.Sprintf(`# TunnelBypass WSS (wstunnel) - Quick Instructions
+	config := lanSelfHostFileHeader(opt) + fmt.Sprintf(`# TunnelBypass WSS (wstunnel) - Quick Instructions
 Server:   %s:%d
 SNI/Host: %s
 User:     %s

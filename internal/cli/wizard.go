@@ -489,14 +489,21 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
-	fmt.Printf("\n%s[3] Detecting Server Public IP...%s ", ColorYellow, ColorReset)
-	detectedIP := utils.GetPublicIP()
-	flushInput(reader) // Clear pending Enter keystrokes
-	if detectedIP != "" {
-		fmt.Printf("%sFound: %s%s\n", ColorGreen, detectedIP, ColorReset)
+	var detectedIP string
+	if wizardSelfHostEffective {
+		fmt.Printf("\n%s[3] LAN self-host: client endpoint IP will be resolved on this machine (same LAN as your clients).%s\n", ColorYellow, ColorReset)
+		fmt.Printf("    %s(No public-IP detection — use run without --self-host if you need a public address.)%s\n", ColorGray, ColorReset)
+		detectedIP = ""
 	} else {
-		fmt.Printf("%sFailed to detect.%s\n", ColorRed, ColorReset)
-		detectedIP = prompt(reader, fmt.Sprintf("    %sEnter Server IP Address manually: %s", ColorBold, ColorReset))
+		fmt.Printf("\n%s[3] Detecting Server Public IP...%s ", ColorYellow, ColorReset)
+		detectedIP = utils.GetPublicIP()
+		flushInput(reader) // Clear pending Enter keystrokes
+		if detectedIP != "" {
+			fmt.Printf("%sFound: %s%s\n", ColorGreen, detectedIP, ColorReset)
+		} else {
+			fmt.Printf("%sFailed to detect.%s\n", ColorRed, ColorReset)
+			detectedIP = prompt(reader, fmt.Sprintf("    %sEnter Server IP Address manually: %s", ColorBold, ColorReset))
+		}
 	}
 
 	if transport == "vless-ws" {
@@ -568,6 +575,12 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	if installAsService {
 		rspec.Behavior.GenerateOnly = true
 		rspec.Behavior.AutoStart = false
+	}
+	if wizardSelfHostEffective {
+		rspec.Behavior.HostMode = "lan"
+		if wizardLanRelaxEffective {
+			rspec.Behavior.LANRelax = true
+		}
 	}
 	if err := engine.Run(context.Background(), rspec); err != nil {
 		fmt.Printf("\n%s✗ Setup failed: %v%s\n", ColorRed, err, ColorReset)

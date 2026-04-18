@@ -9,6 +9,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/types"
+	"tunnelbypass/internal/network"
 	"tunnelbypass/internal/utils"
 	"tunnelbypass/tools/host_catalog"
 )
@@ -144,18 +145,16 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 		},
 		"routing": map[string]interface{}{
 			"domainStrategy": "IPIfNonMatch",
-			"rules": []interface{}{
-				map[string]interface{}{
-					"type":        "field",
-					"inboundTag":  []string{"api-in"},
-					"outboundTag": "api",
+			"rules": append(
+				[]interface{}{
+					map[string]interface{}{
+						"type":        "field",
+						"inboundTag":  []string{"api-in"},
+						"outboundTag": "api",
+					},
 				},
-				map[string]interface{}{
-					"type":        "field",
-					"ip":          []string{"geoip:private"},
-					"outboundTag": "block",
-				},
-			},
+				network.BuildXrayPrivateRule(opt.NetworkProfile.PrivateRouting())...,
+			),
 		},
 		"policy": map[string]interface{}{
 			"levels": map[string]interface{}{

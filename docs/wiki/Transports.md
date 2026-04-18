@@ -31,3 +31,7 @@ Self-signed certificates: clients may need **allow insecure** or pinned certs—
 ## Spec files and non-interactive runs
 
 For automation, prefer **`--spec`** / config flags documented in `tunnelbypass run -help` so CI or config management can call the same paths as the interactive flow without a TTY.
+
+## Same-LAN endpoints
+
+If clients reach the server on a **private IP** (same subnet), use **`--self-host`** (wizard: `tunnelbypass --self-host`, or **`run`** / **`generate`**) so the tool resolves and pins that endpoint instead of a public IP. Strict vs relaxed private routing for Xray is documented in [Operations — LAN self-host](Operations.md#lan-self-host).
