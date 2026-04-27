@@ -58,6 +58,7 @@ var (
 func Main() {
 	terminal.EnableUTF8Console()
 	terminal.EnableVTProcessing()
+	CheckForUpdates()
 	tblog.Init()
 	if v := strings.TrimSpace(os.Getenv("TUNNELBYPASS_DATA_DIR")); v != "" {
 		installer.SetDataRootOverride(v)

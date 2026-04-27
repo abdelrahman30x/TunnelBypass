@@ -19,6 +19,20 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
     }
 }
 
+# Check for updates from remote GitHub VERSION
+try {
+    $remoteVersionUrl = "https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/VERSION"
+    $remoteVersion = (Invoke-RestMethod -Uri $remoteVersionUrl -TimeoutSec 2).Trim()
+    if ($remoteVersion -and ($remoteVersion -ne $Version)) {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "[!] ALERT: Remote version is $remoteVersion but you are building $Version." -ForegroundColor Yellow
+        Write-Host "[!] Consider pulling latest changes or updating VERSION file." -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+} catch {
+    # Ignore network/fetch errors in build script
+}
+
 $outDir = Join-Path (Join-Path (Get-Location) "build") $Version
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
