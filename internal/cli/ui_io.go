@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"tunnelbypass/core/version"
 )
 
 func printLogo() {
@@ -21,7 +23,7 @@ func printLogo() {
 	fmt.Printf("%s%s%s\n", ColorTeal+ColorBold, bar, ColorReset)
 	fmt.Printf("   %sTunnelBypass CLI%s  -  %s%s%s  -  %sDPI Bypass Tool%s\n",
 		ColorBold+ColorWhite, ColorReset,
-		ColorBold+ColorOrange, version, ColorReset,
+		ColorBold+ColorOrange, version.Version, ColorReset,
 		ColorGray, ColorReset)
 	fmt.Printf("%s%s%s\n", ColorTeal+ColorBold, bar, ColorReset)
 }

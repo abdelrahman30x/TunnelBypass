@@ -52,7 +52,7 @@ foreach ($t in $Targets) {
     $env:GOOS = $os
     $env:GOARCH = $arch
 
-    go build -trimpath -ldflags "-s -w -X main.Version=$Version" -o $binPath ./cmd
+    go build -trimpath -ldflags "-s -w -X tunnelbypass/core/version.Version=$Version" -o $binPath ./cmd
     if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) { throw "Build failed for $os/$arch" }
 
     if ($os -ne "windows") {
@@ -80,3 +80,8 @@ foreach ($t in $Targets) {
 Write-Host "=================="
 Write-Host "All release assets created successfully:"
 Get-ChildItem -Path $outDir -Filter "tunnelbypass_${Version}_*" | Select-Object Name, Length | Format-Table
+
+Write-Host "Creating git commit for version $Version..."
+git add .
+git commit -m "Release $Version"
+Write-Host "Done."

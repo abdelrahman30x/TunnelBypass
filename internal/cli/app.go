@@ -23,15 +23,14 @@ import (
 	"tunnelbypass/internal/runtimeenv"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/terminal"
+	"tunnelbypass/core/version"
 	"tunnelbypass/tools/host_catalog"
 )
 
-var version = "v1.3.3"
-
-// SetVersion sets the user-visible release string before Main (from cmd, or tests).
+// SetVersion is a legacy wrapper (cli internal version is now linked to core/version).
 func SetVersion(v string) {
 	if v != "" {
-		version = v
+		version.Version = v
 	}
 }
 
@@ -119,7 +118,7 @@ func Main() {
 		shouldElevate = true
 	}
 	if shouldElevate && !elevate.IsAdmin() {
-		fmt.Printf("%s[!] TunnelBypass %s - Administrator privileges required.%s\n", ColorYellow, version, ColorReset)
+		fmt.Printf("%s[!] TunnelBypass %s - Administrator privileges required.%s\n", ColorYellow, version.Version, ColorReset)
 		err := elevate.Elevate()
 		if err != nil {
 			log.Fatalf("Failed to elevate: %v", err)
@@ -137,11 +136,11 @@ func Main() {
 		p := runtimeenv.Probe()
 		debug.Logf("%s", runtimeenv.FormatProbeForDebug(p))
 	}
-	debug.Logf("version=%s args=%q", version, os.Args)
+	debug.Logf("version=%s args=%q", version.Version, os.Args)
 	debug.Logf("default config path=%s", *configFlag)
 
 	if *verReq {
-		fmt.Println("TunnelBypass Version:", version)
+		fmt.Println("TunnelBypass Version:", version.Version)
 		return
 	}
 
@@ -306,7 +305,7 @@ func isPrivilegedCommand(cmd string) bool {
 }
 
 func printUsage() {
-	fmt.Printf("%sTunnelBypass %s%s - Unified Protocol Installer & Manager\n", ColorBold, version, ColorReset)
+	fmt.Printf("%sTunnelBypass %s%s - Unified Protocol Installer & Manager\n", ColorBold, version.Version, ColorReset)
 	fmt.Println("Usage:")
 	fmt.Println("  tunnelbypass [flags] <command>")
 	fmt.Println("\nCommands:")

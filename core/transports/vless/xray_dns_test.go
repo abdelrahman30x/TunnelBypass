@@ -29,8 +29,8 @@ func TestMergeXrayDNSIntoConfig(t *testing.T) {
 		t.Fatalf("routing.domainStrategy: want UseIPv4 got %#v", r["domainStrategy"])
 	}
 	rules := r["rules"].([]interface{})
-	if len(rules) < 3 {
-		t.Fatalf("expected dns+udp53 rules prepended, got %d rules", len(rules))
+	if len(rules) < 4 {
+		t.Fatalf("expected dns+udp53+ips rules prepended, got %d rules", len(rules))
 	}
 	first := rules[0].(map[string]interface{})
 	if first["outboundTag"] != "direct" {
@@ -49,8 +49,8 @@ func TestMergeXrayDNSIntoConfig(t *testing.T) {
 		t.Fatalf("first rule protocol type: %#v", first["protocol"])
 	}
 	second := rules[1].(map[string]interface{})
-	if second["outboundTag"] != "direct" || second["network"] != "udp" || second["port"] != 53 {
-		t.Fatalf("second rule (udp/53): %#v", second)
+	if second["outboundTag"] != "direct" || second["network"] != "udp,tcp" || second["port"] != 53 {
+		t.Fatalf("second rule (udp,tcp/53): %#v", second)
 	}
 	_, err := json.Marshal(root)
 	if err != nil {

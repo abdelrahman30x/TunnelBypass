@@ -4,6 +4,5 @@ package main
 import "tunnelbypass/internal/cli"
 
 func main() {
-	cli.SetVersion(Version)
 	cli.Main()
 }

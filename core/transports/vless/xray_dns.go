@@ -16,9 +16,9 @@ func MergeXrayDNSIntoConfig(root map[string]interface{}) {
 
 	root["dns"] = map[string]interface{}{
 		"servers": []interface{}{
-			"8.8.8.8",
-			"1.1.1.1",
-			"9.9.9.9",
+			"localhost",
+			map[string]interface{}{"address": "1.1.1.1", "port": 53},
+			map[string]interface{}{"address": "8.8.8.8", "port": 53},
 		},
 		"queryStrategy": "UseIPv4",
 	}
@@ -41,8 +41,13 @@ func MergeXrayDNSIntoConfig(root map[string]interface{}) {
 		},
 		map[string]interface{}{
 			"type":        "field",
-			"network":     "udp",
+			"network":     "udp,tcp",
 			"port":        53,
+			"outboundTag": "direct",
+		},
+		map[string]interface{}{
+			"type":        "field",
+			"ip":          []string{"1.1.1.1", "8.8.8.8"},
 			"outboundTag": "direct",
 		},
 	}
