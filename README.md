@@ -163,3 +163,7 @@ docs/wiki/   → full docs (networking, firewall, Arabic guide, etc.)
 ## License
 
 [MIT](LICENSE)
+
+---
+
+Made with ❤️ in Egypt
