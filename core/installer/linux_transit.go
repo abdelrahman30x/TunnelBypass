@@ -7,7 +7,7 @@ Linux Transit Philosophy:
      get working names without rewriting system-wide DNS (company resolvers stay intact).
 
   2. Isolated networking — TB_* iptables chains with -m comment for TunnelBypass rules only;
-     MASQUERADE uses -o <egress_iface> from the default route so Docker/OVS bridge traffic is not
+     MASQUERADE uses -o <egress_iface> from the default route so OVS bridge traffic is not
      accidentally NATed.
 
   3. Safe rollback — each reversible change appends an explicit inverse line to

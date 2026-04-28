@@ -32,11 +32,10 @@ func printContainerWizardWarning() {
 		return
 	}
 	fmt.Printf("\n%s╔══════════════════════════════════════════════════════════════╗%s\n", ColorBold+ColorYellow, ColorReset)
-	fmt.Printf("║  %s[!] Container / Docker detected%s                              ║\n", ColorBold+ColorRed, ColorReset)
+	fmt.Printf("║  %s[!] Container detected%s                                       ║\n", ColorBold+ColorRed, ColorReset)
 	fmt.Printf("║  %sDo not rely on wizard “services” here — use foreground run.%s ║\n", ColorGray, ColorReset)
 	fmt.Printf("║  %sDetached processes are a poor fit for container PID 1 / CI.%s ║\n", ColorGray, ColorReset)
 	fmt.Printf("║  %sUse instead:%s %s%s run <transport>%s                 ║\n", ColorGray, ColorReset, ColorBold+ColorGreen, utils.AppName(), ColorReset)
-	fmt.Printf("║  %sExample:%s %sdocker run ... run wss%s                         ║\n", ColorGray, ColorReset, ColorCyan, ColorReset)
 	fmt.Printf("║  %sService install in containers is not supported here.%s              ║\n", ColorGray, ColorReset)
 	fmt.Printf("%s╚══════════════════════════════════════════════════════════════╝%s\n\n", ColorBold+ColorYellow, ColorReset)
 }

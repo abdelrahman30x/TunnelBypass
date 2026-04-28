@@ -56,9 +56,6 @@ func TestNetworkProfilePrivateRouting(t *testing.T) {
 }
 
 func TestIfaceNameScore(t *testing.T) {
-	if ifaceNameScore("docker0") != -1 {
-		t.Fatal("docker0 should skip")
-	}
 	if ifaceNameScore("eth0") != 3 {
 		t.Fatalf("eth0 score got %d", ifaceNameScore("eth0"))
 	}

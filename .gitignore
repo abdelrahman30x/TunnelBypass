@@ -25,9 +25,6 @@ dep_server.txt
 /linux/
 /windows/
 
-# Local Docker secrets
-docker/.env
-
 # IDE and OS metadata
 .idea/
 .vscode/

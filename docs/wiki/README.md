@@ -23,7 +23,7 @@ For install commands and quick copy-paste, start from the [root README](../../RE
 | Page | What’s inside | Read when |
 |------|----------------|-----------|
 | [Home](Home.md) | Purpose, what you get, boundaries; [Arabic for beginners](Home.md#arabic-beginners) | First time here |
-| [Installation](Installation.md) | Build from source, install scripts, Docker, data dirs | You need binaries or paths |
+| [Installation](Installation.md) | Build from source, install scripts, data dirs | You need binaries or paths |
 | [Transports](Transports.md) | Choosing a stack, stealth trade-offs, clients | You’re picking a protocol |
 | [Linux networking](Linux-networking.md) | Transit sysctl, iptables, autopilot, safe rollback | Server is Linux and you use network tuning |
 | [Operations](Operations.md) | `status`, `health`, uninstall, portable mode, LAN `--self-host` | Day-to-day commands |

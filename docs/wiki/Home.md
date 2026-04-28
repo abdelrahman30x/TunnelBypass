@@ -57,7 +57,7 @@ TunnelBypass يساعدك تجهّز **نفقًا آمناً** على سيرفر
 
 ## How to read this handbook
 
-1. [Installation](Installation.md) — binaries, Docker, where files live.
+1. [Installation](Installation.md) — binaries, where files live.
 2. [Transports](Transports.md) — choose a protocol and understand trade-offs.
 3. [Linux networking](Linux-networking.md) — only if the server is Linux and you use transit features.
 4. [Operations](Operations.md) — `status`, `uninstall`, portable runs, LAN self-host, health checks.

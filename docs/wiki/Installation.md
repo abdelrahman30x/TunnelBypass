@@ -19,12 +19,6 @@ Prebuilt binaries: use the install scripts referenced in the root **README** (`s
 
 Pinned version: set `INSTALL_VERSION` to a tag when you need reproducible installs.
 
-## Docker
-
-Build a local image and run with a **data volume** mapped so configs survive restarts. The environment variable **`TUNNELBYPASS_DATA_DIR`** (e.g. `/data` in examples) anchors configs and logs inside the container.
-
-See `docker-compose.yml` and `docker/env.example`. Treat **service installation inside the container** as optional—many operators prefer `run portable` or foreground `run` for server workloads in Docker.
-
 ## Data directories (mental model)
 
 Without overrides, defaults are per-user on desktop OSes and documented system paths for “system” layouts. **`--data-dir`**, **`run portable`**, and **`TUNNELBYPASS_DATA_DIR`** exist so you can:

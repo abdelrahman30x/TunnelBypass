@@ -42,7 +42,7 @@ func ifaceNameScore(name string) int {
 	if ln == "" || ln == "lo" {
 		return -1
 	}
-	skipSubstr := []string{"docker", "veth", "vmnet", "wsl", "virbr", "loopback"}
+	skipSubstr := []string{"veth", "vmnet", "wsl", "virbr", "loopback"}
 	for _, s := range skipSubstr {
 		if strings.Contains(ln, s) {
 			return -1

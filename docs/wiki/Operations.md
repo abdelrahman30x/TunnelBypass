@@ -19,7 +19,7 @@ When available, **`status`** / **`health`** can summarize data dir, listeners, a
 
 ## Portable mode
 
-`run portable …` keeps everything in the foreground and avoids elevating for a system service when your transport allows it—useful for laptops, CI, or Docker without systemd enable.
+`run portable …` keeps everything in the foreground and avoids elevating for a system service when your transport allows it—useful for laptops or CI.
 
 <a id="lan-self-host"></a>
 

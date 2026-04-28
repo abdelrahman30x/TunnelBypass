@@ -72,9 +72,6 @@ func isWindowsAdmin() bool {
 }
 
 func likelyContainer() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
 	if v := os.Getenv("container"); v != "" {
 		return true
 	}
@@ -83,7 +80,7 @@ func likelyContainer() bool {
 		return false
 	}
 	s := string(data)
-	return strings.Contains(s, "docker") || strings.Contains(s, "kubepods") || strings.Contains(s, "containerd")
+	return strings.Contains(s, "kubepods") || strings.Contains(s, "containerd")
 }
 
 // ChooseStrategy picks native vs user-mode service installation.
