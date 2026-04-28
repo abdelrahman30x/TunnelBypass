@@ -1,24 +1,38 @@
-# TunnelBypass
+<h1 align="center">TunnelBypass</h1>
 
-[![Release](https://img.shields.io/github/v/release/abdelrahman30x/TunnelBypass?style=flat-square&logo=github&color=181717)](https://github.com/abdelrahman30x/TunnelBypass/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&style=flat-square)](https://go.dev/dl/)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/.github/banner.png" alt="TunnelBypass Banner" width="100%">
+</p>
 
-Spin up tunnel endpoints on **Linux** or **Windows** without wrestling with config files. Pick a transport, answer a few prompts, grab your configs.
+<p align="center">
+  <a href="https://github.com/abdelrahman30x/TunnelBypass/releases">
+    <img src="https://img.shields.io/github/v/release/abdelrahman30x/TunnelBypass?style=flat-square&logo=github&color=181717" alt="Release">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License">
+  </a>
+  <a href="https://go.dev/dl/">
+    <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&style=flat-square" alt="Go">
+  </a>
+</p>
 
-No web UI — everything runs in the terminal.
+<p align="center">
+  <strong>High-performance CLI for Xray, Hysteria & WireGuard.</strong><br>
+  Deploy DPI-resistant tunnel endpoints on <strong>Linux</strong> or <strong>Windows</strong> with one command.<br>
+  Auto-generated configs. No web UI — one binary.
+</p>
 
 ---
 
-## What is it?
+<h2>What is it?</h2>
 
-TunnelBypass is a CLI tool that sets up server-side tunnel endpoints. It walks you through an interactive wizard, generates client configs and sharing links automatically, and can optionally install itself as a system service.
+<p>TunnelBypass is a CLI tool that sets up server-side tunnel endpoints. It walks you through an interactive wizard, generates client configs and sharing links automatically, and can optionally install itself as a system service.</p>
 
-Built in Go. Single binary. No dependencies.
+<p>Built in Go. Single binary. No dependencies.</p>
 
 ---
 
-## Features
+<h2>Features</h2>
 
 - 🧙 Interactive wizard — run `tunnelbypass` and follow the prompts
 - 🔌 8+ transports out of the box
@@ -29,22 +43,22 @@ Built in Go. Single binary. No dependencies.
 
 ---
 
-## Supported Transports
+<h2>Supported Transports</h2>
 
-**VLESS / Xray**
+<p><strong>VLESS / Xray</strong></p>
 - `vless+reality` — TCP, XTLS Vision, fronts as real TLS
 - `vless+ws+tls` — WebSocket + TLS
 - `vless+reality+grpc` — gRPC over REALITY
 
-**SSH & wrappers**
+<p><strong>SSH & wrappers</strong></p>
 - `ssh` — classic SSH; optional UDPGW for UDP
 - `ssh-tls` — TLS front-end (Xray) to SSH backend
 
-**UDP / QUIC**
+<p><strong>UDP / QUIC</strong></p>
 - `hysteria` — Hysteria 2 over QUIC
 - `wireguard` — kernel-style VPN tunnel
 
-**Other**
+<p><strong>Other</strong></p>
 - `wss` — WebSocket + TLS via wstunnel
 - `tls` — TLS wrapper (stunnel-style)
 
@@ -52,9 +66,9 @@ Run `tunnelbypass run -help` for all `--type` values and flags.
 
 ---
 
-## Installation
+<h2>Installation</h2>
 
-### Linux
+<h3>Linux</h3>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
@@ -65,7 +79,7 @@ Optional custom prefix:
 INSTALL_PREFIX="$HOME/.local/bin" curl -fsSL ... | bash
 ```
 
-### Windows
+<h3>Windows</h3>
 
 ```powershell
 irm https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.ps1 | iex
@@ -73,7 +87,7 @@ irm https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/i
 
 > If execution policy blocks it: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then retry.
 
-### From source
+<h3>From source</h3>
 
 ```bash
 git clone https://github.com/abdelrahman30x/TunnelBypass.git && cd TunnelBypass
@@ -84,24 +98,28 @@ Windows: same `go build` command, then `.\tunnelbypass.exe`.
 
 ---
 
-## Usage
+<h2>Usage</h2>
 
-**Interactive**
+<p><strong>Interactive</strong></p>
+
 ```bash
 tunnelbypass
 ```
 
-**One-shot**
+<p><strong>One-shot</strong></p>
+
 ```bash
 tunnelbypass run portable reality --port 443 --sni example.com --uuid auto
 ```
 
-**Generate configs only**
+<p><strong>Generate configs only</strong></p>
+
 ```bash
 tunnelbypass generate reality --port 443 --sni example.com
 ```
 
-**Other commands**
+<p><strong>Other commands</strong></p>
+
 ```bash
 tunnelbypass status      # runtime / service status
 tunnelbypass health      # quick health probe
@@ -110,15 +128,15 @@ tunnelbypass uninstall   # remove configs, services, and binary
 
 ---
 
-## Examples
+<h2>Examples</h2>
 
-See [`EXAMPLES.md`](EXAMPLES.md) for copy-paste commands and spec files.
+<p>See <a href="EXAMPLES.md">EXAMPLES.md</a> for copy-paste commands and spec files.</p>
 
 ---
 
-## LAN Self-Host
+<h2>LAN Self-Host</h2>
 
-When client and server are on the same network, use `--self-host` to resolve a local RFC1918 address instead of a public IP.
+<p>When client and server are on the same network, use <code>--self-host</code> to resolve a local RFC1918 address instead of a public IP.</p>
 
 ```bash
 tunnelbypass --self-host              # interactive
@@ -130,7 +148,7 @@ tunnelbypass --self-host run reality --port 8443
 
 ---
 
-## Project Structure
+<h2>Project Structure</h2>
 
 ```
 cmd/         → entrypoint
@@ -142,7 +160,7 @@ docs/wiki/   → full docs (networking, firewall, Arabic guide, etc.)
 
 ---
 
-## Tips
+<h2>Tips</h2>
 
 - Some transports need **root / admin** (firewall rules, services). Use `--no-elevate` or `run portable` to stay user-level.
 - Portable mode: `--portable`, `--data-dir <path>`, or `TUNNELBYPASS_DATA_DIR` to control where configs and logs live.
@@ -154,16 +172,20 @@ docs/wiki/   → full docs (networking, firewall, Arabic guide, etc.)
 
 ---
 
-## Demo
+<h2>Demo</h2>
 
-[![TunnelBypass — setup](https://img.youtube.com/vi/praPwuKj9d4/maxresdefault.jpg)](https://www.youtube.com/watch?v=praPwuKj9d4)
-
----
-
-## License
-
-[MIT](LICENSE)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=praPwuKj9d4">
+    <img src="https://img.youtube.com/vi/praPwuKj9d4/maxresdefault.jpg" alt="TunnelBypass — setup" width="70%">
+  </a>
+</p>
 
 ---
 
-Made with ❤️ in Egypt
+<h2>License</h2>
+
+<p><a href="LICENSE">MIT</a></p>
+
+---
+
+<p align="center">Made with ❤️ in Egypt</p>
