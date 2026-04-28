@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/.github/banner.png" alt="TunnelBypass Banner" width="100%">
+  <img src="https://github.com/user-attachments/assets/0a6cd2fa-10ae-43fd-9be1-46be294465bd" alt="TunnelBypass Banner" width="100%">
 </p>
 
 <h1>TunnelBypass</h1>
