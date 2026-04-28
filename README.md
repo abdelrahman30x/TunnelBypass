@@ -1,8 +1,8 @@
-<h1 align="center">TunnelBypass</h1>
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/.github/banner.png" alt="TunnelBypass Banner" width="100%">
 </p>
+
+<h1>TunnelBypass</h1>
 
 <p align="center">
   <a href="https://github.com/abdelrahman30x/TunnelBypass/releases">
@@ -16,11 +16,7 @@
   </a>
 </p>
 
-<p align="center">
-  <strong>High-performance CLI for Xray, Hysteria & WireGuard.</strong><br>
-  Deploy DPI-resistant tunnel endpoints on <strong>Linux</strong> or <strong>Windows</strong> with one command.<br>
-  Auto-generated configs. No web UI — one binary.
-</p>
+<p>High-performance CLI for Xray, Hysteria & WireGuard. Deploy DPI-resistant tunnel endpoints on <strong>Linux</strong> or <strong>Windows</strong> with one command. Auto-generated configs. No web UI — one binary.</p>
 
 ---
 
@@ -32,37 +28,41 @@
 
 ---
 
-<h2>Features</h2>
+<h2>✨ Features</h2>
 
-- 🧙 Interactive wizard — run `tunnelbypass` and follow the prompts
-- 🔌 8+ transports out of the box
-- ⚡ One-shot mode — `tunnelbypass run <transport> ...` for scripts and automation
-- 📦 Auto-generated configs + sharing links — drop into v2rayN, Nekoray, sing-box, WireGuard apps, etc.
-- 🪟 Optional Windows service / Linux systemd integration
-- 🔒 Sensible defaults with LAN hardening
+- 🧙 **Interactive wizard** — run `tunnelbypass` and follow the prompts
+- 🔌 **8+ transports** out of the box
+- ⚡ **One-shot mode** — `tunnelbypass run <transport> ...` for scripts and automation
+- 📦 **Auto-generated configs + sharing links** — drop into v2rayN, Nekoray, sing-box, WireGuard apps, etc.
+- 🪟 **Optional Windows service / Linux systemd** integration
+- 🔒 **Sensible defaults** with LAN hardening
 
 ---
 
 <h2>Supported Transports</h2>
 
 <p><strong>VLESS / Xray</strong></p>
+
 - `vless+reality` — TCP, XTLS Vision, fronts as real TLS
 - `vless+ws+tls` — WebSocket + TLS
 - `vless+reality+grpc` — gRPC over REALITY
 
 <p><strong>SSH & wrappers</strong></p>
+
 - `ssh` — classic SSH; optional UDPGW for UDP
 - `ssh-tls` — TLS front-end (Xray) to SSH backend
 
 <p><strong>UDP / QUIC</strong></p>
+
 - `hysteria` — Hysteria 2 over QUIC
 - `wireguard` — kernel-style VPN tunnel
 
 <p><strong>Other</strong></p>
+
 - `wss` — WebSocket + TLS via wstunnel
 - `tls` — TLS wrapper (stunnel-style)
 
-Run `tunnelbypass run -help` for all `--type` values and flags.
+<p>Run <code>tunnelbypass run -help</code> for all <code>--type</code> values and flags.</p>
 
 ---
 
