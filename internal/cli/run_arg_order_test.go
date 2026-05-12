@@ -7,10 +7,10 @@ import (
 
 func TestReorderRunArgsForFlagParse_userCase(t *testing.T) {
 	in := []string{
-		"--portable", "--dry-run", "--self-host", "reality", "--port", "8443", "--sni", "example.com",
+		"--portable", "--dry-run", "reality", "--port", "8443", "--sni", "example.com",
 	}
 	want := []string{
-		"--portable", "--dry-run", "--self-host", "--port", "8443", "--sni", "example.com", "reality",
+		"--portable", "--dry-run", "--port", "8443", "--sni", "example.com", "reality",
 	}
 	got := reorderRunArgsForFlagParse(in)
 	if !reflect.DeepEqual(got, want) {
@@ -19,7 +19,7 @@ func TestReorderRunArgsForFlagParse_userCase(t *testing.T) {
 }
 
 func TestReorderRunArgsForFlagParse_noChangeWhenTransportLast(t *testing.T) {
-	in := []string{"--portable", "--self-host", "--port", "8443", "reality"}
+	in := []string{"--portable", "--port", "8443", "reality"}
 	got := reorderRunArgsForFlagParse(in)
 	if !reflect.DeepEqual(got, in) {
 		t.Fatalf("got %#v want %#v", got, in)

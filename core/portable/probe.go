@@ -10,6 +10,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	tbssh "tunnelbypass/core/ssh"
+	"tunnelbypass/core/types"
 )
 
 func probeTCPWithRetry(ctx context.Context, addr string, log *slog.Logger, label string) error {
@@ -84,7 +85,7 @@ func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 	case "udpgw":
 		p := o.UDPGWPort
 		if p <= 0 {
-			p = 7300
+			p = types.DefaultUDPGWPort
 		}
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		if err := probeTCPWithRetry(context.Background(), addr, nil, "udpgw"); err != nil {
@@ -101,7 +102,7 @@ func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 		}
 		up := o.UDPGWPort
 		if up <= 0 {
-			up = 7300
+			up = types.DefaultUDPGWPort
 		}
 		uaddr := fmt.Sprintf("127.0.0.1:%d", up)
 		if err := probeTCPWithRetry(context.Background(), uaddr, nil, "udpgw"); err != nil {
@@ -111,7 +112,7 @@ func runProbeForTransport(name string, o Options) (ok bool, errStr string) {
 	case "wss":
 		p := o.WssPort
 		if p <= 0 {
-			p = 443
+			p = types.DefaultTLSTunnelListenPort
 		}
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		if err := probeTCPWithRetry(context.Background(), addr, nil, "wss"); err != nil {
@@ -164,7 +165,7 @@ func normalizePortsForOrchestration(deps []string, o *Options) {
 	}
 	p := o.UDPGWPort
 	if p <= 0 {
-		p = 7300
+		p = types.DefaultUDPGWPort
 	}
 	o.UDPGWPort = installer.EnsureFreeTCPPort(p, "UDPGW")
 }

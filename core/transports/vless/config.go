@@ -248,7 +248,6 @@ func GenerateClientConfig(opt types.ConfigOptions) (string, error) {
 			"sni":         clientSNI,
 			"fingerprint": "chrome",
 			"serverName":  clientSNI,
-			"serverNames": names,
 		}
 	} else if opt.Transport == "grpc" {
 		stream["network"] = "grpc"
@@ -262,9 +261,8 @@ func GenerateClientConfig(opt types.ConfigOptions) (string, error) {
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "info",
-			"access":   getAbsLogPath("xray_access.log"),
-			"error":    getAbsLogPath("xray_error.log"),
 		},
+		"inbounds":  BuildClientInbounds(),
 		"outbounds": []interface{}{outbound},
 	}
 
@@ -308,7 +306,7 @@ func GenerateVlessURLForSNI(opt types.ConfigOptions, sni string) string {
 	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-VLESS-Reality-%s", utils.SanitizeForTag(sni)))
 
 	return fmt.Sprintf(
-		"vless://%s@%s:%d?security=reality&encryption=none&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=tcp&headerType=none&alpn=h2%%2Chttp%%2F1.1&flow=xtls-rprx-vision#%s",
+		"vless://%s@%s:%d?security=reality&encryption=none&allowInsecure=true&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=tcp&headerType=none&alpn=h2%%2Chttp%%2F1.1&flow=xtls-rprx-vision#%s",
 		opt.UUID, endpoint, opt.Port,
 		url.QueryEscape(opt.PublicKey),
 		sni, sid, url.QueryEscape("/"), tag,
@@ -367,6 +365,38 @@ func GenerateShareLinks(opt types.ConfigOptions) []utils.ShareLink {
 		})
 	}
 	return links
+}
+
+// BuildClientInbounds returns the standard SOCKS (10808) + HTTP (10809) inbounds
+// used by all Xray client configs so the local machine can connect to the proxy.
+func BuildClientInbounds() []interface{} {
+	return []interface{}{
+		map[string]interface{}{
+			"tag":      "socks-in",
+			"port":     10808,
+			"listen":   "127.0.0.1",
+			"protocol": "socks",
+			"settings": map[string]interface{}{
+				"auth": "noauth",
+				"udp":  true,
+				"ip":   "127.0.0.1",
+			},
+			"sniffing": map[string]interface{}{
+				"enabled":      true,
+				"destOverride": []string{"http", "tls", "quic"},
+			},
+		},
+		map[string]interface{}{
+			"tag":      "http-in",
+			"port":     10809,
+			"listen":   "127.0.0.1",
+			"protocol": "http",
+			"sniffing": map[string]interface{}{
+				"enabled":      true,
+				"destOverride": []string{"http", "tls", "quic"},
+			},
+		},
+	}
 }
 
 func getAbsLogPath(name string) string {

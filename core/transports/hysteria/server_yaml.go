@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 
 	"gopkg.in/yaml.v3"
@@ -28,7 +29,7 @@ func EnsureServerYAML(configPath string) error {
 
 	if l, ok := root["listen"].(string); ok {
 		if utils.ListenAddrNeedsIPv4WildcardFix(l) {
-			port := 443
+			port := types.DefaultHysteriaListenPort
 			if p, ok := utils.ListenPortFromField(l); ok {
 				port = p
 			}
@@ -36,7 +37,7 @@ func EnsureServerYAML(configPath string) error {
 			changed = true
 		}
 	} else if root["listen"] == nil {
-		root["listen"] = "0.0.0.0:443"
+		root["listen"] = fmt.Sprintf("0.0.0.0:%d", types.DefaultHysteriaListenPort)
 		changed = true
 	}
 

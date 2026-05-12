@@ -19,3 +19,18 @@ func EffectiveWstunnelVersion() string {
 func EffectiveStunnelVersion() string {
 	return StunnelVersion
 }
+
+// EffectiveShadowsocksVersion returns the embedded default release tag.
+func EffectiveShadowsocksVersion() string {
+	return ShadowsocksVersion
+}
+
+// EffectiveV2rayPluginVersion returns the embedded default release tag.
+func EffectiveV2rayPluginVersion() string {
+	return V2rayPluginVersion
+}
+
+// EffectiveMasterDnsVPNVersion returns the embedded default release tag.
+func EffectiveMasterDnsVPNVersion() string {
+	return MasterDnsVPNVersion
+}

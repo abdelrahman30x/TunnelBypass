@@ -30,7 +30,7 @@ func NormalizeWSPath(p string) string {
 // GenerateVlessWSServerConfig writes Xray VLESS + WebSocket + TLS server JSON under configs/vless-ws.
 func GenerateVlessWSServerConfig(opt types.ConfigOptions) (string, error) {
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	opt.UUID = strings.TrimSpace(opt.UUID)
 	if opt.UUID == "" {
@@ -211,9 +211,8 @@ func GenerateVlessWSClientConfig(opt types.ConfigOptions) (string, error) {
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "info",
-			"access":   getAbsLogPath("xray_access.log"),
-			"error":    getAbsLogPath("xray_error.log"),
 		},
+		"inbounds":  BuildClientInbounds(),
 		"outbounds": []interface{}{outbound},
 	}
 

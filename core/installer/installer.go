@@ -28,14 +28,17 @@ import (
 )
 
 const (
-	XrayVersion              = "v24.11.11"
+	XrayVersion              = "v26.3.27"
 	WstunnelVersion          = "v10.5.2"
 	HysteriaVersion          = "v2.6.1"
+	ShadowsocksVersion       = "v1.24.0"
+	V2rayPluginVersion       = "v5.49.0"
 	WireGuardMSIVersion      = "0.5.3"
 	WinSWVersion             = "v2.12.0"
 	OpenSSLWin64LightVersion = "3_5_0"
 	OpenSSLUnixMinVersion    = "1.1.1"
 	StunnelVersion           = "latest"
+	MasterDnsVPNVersion      = "v2026.05.04.123456-38b73de"
 )
 
 // Delegates to layout.SetDataRootOverride.
@@ -142,6 +145,24 @@ func uniqueDNSNames(primary string, extra []string) []string {
 	return out
 }
 
+// certLeafHasDNSSAN is true when the first PEM certificate lists at least one DNS name in SAN.
+// Certs with only legacy Subject CN fail verification on Go 1.19+ ("use SANs instead").
+func certLeafHasDNSSAN(certPath string) bool {
+	b, err := os.ReadFile(certPath)
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(b)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false
+	}
+	c, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	return len(c.DNSNames) > 0
+}
+
 // EnsureSelfSignedCert writes a single-CN self-signed certificate (idempotent if files exist).
 func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
 	return EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName, nil)
@@ -152,7 +173,11 @@ func EnsureSelfSignedCert(certPath, keyPath, commonName string) error {
 func EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName string, extraDNS []string) error {
 	if _, err := os.Stat(certPath); err == nil {
 		if _, err2 := os.Stat(keyPath); err2 == nil {
-			return nil // both files exist
+			if certLeafHasDNSSAN(certPath) {
+				return nil
+			}
+			_ = os.Remove(certPath)
+			_ = os.Remove(keyPath)
 		}
 	}
 	if commonName == "" {
@@ -166,33 +191,22 @@ func EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName string, extraDNS 
 		openssl, _ = exec.LookPath("openssl")
 	}
 	if openssl != "" {
-		var cmd *exec.Cmd
-		if len(dns) <= 1 {
-			cmd = exec.Command(
-				openssl,
-				"req", "-x509", "-newkey", "rsa:2048",
-				"-nodes",
-				"-keyout", keyPath,
-				"-out", certPath,
-				"-days", "365",
-				"-subj", "/CN="+commonName,
-			)
-		} else {
-			sanParts := make([]string, 0, len(dns))
-			for _, d := range dns {
-				sanParts = append(sanParts, "DNS:"+d)
-			}
-			cmd = exec.Command(
-				openssl,
-				"req", "-x509", "-newkey", "rsa:2048",
-				"-nodes",
-				"-keyout", keyPath,
-				"-out", certPath,
-				"-days", "365",
-				"-subj", "/CN="+commonName,
-				"-addext", "subjectAltName="+strings.Join(sanParts, ","),
-			)
+		// Always set subjectAltName (DNS SANs). Go 1.19+ rejects leaf certs with only CN and no SAN
+		// ("certificate relies on legacy Common Name field, use SANs instead").
+		sanParts := make([]string, 0, len(dns))
+		for _, d := range dns {
+			sanParts = append(sanParts, "DNS:"+d)
 		}
+		cmd := exec.Command(
+			openssl,
+			"req", "-x509", "-newkey", "rsa:2048",
+			"-nodes",
+			"-keyout", keyPath,
+			"-out", certPath,
+			"-days", "365",
+			"-subj", "/CN="+commonName,
+			"-addext", "subjectAltName="+strings.Join(sanParts, ","),
+		)
 		if err := cmd.Run(); err == nil {
 			if _, err1 := os.Stat(certPath); err1 == nil {
 				if _, err2 := os.Stat(keyPath); err2 == nil {
@@ -480,6 +494,8 @@ func (p *XrayServiceWrapper) run() {
 
 		if p.Binary == "hysteria" {
 			p.cmd = exec.Command(binPath, "server", "-c", absConfig)
+		} else if p.Binary == "shadowsocks" {
+			p.cmd = exec.Command(binPath, "-c", absConfig)
 		} else {
 			p.cmd = exec.Command(binPath, "run", "-config", absConfig)
 		}

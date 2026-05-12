@@ -10,6 +10,7 @@ import (
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/provision"
+	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 )
 
@@ -20,6 +21,9 @@ type RunSpec struct {
 	SNI       string `json:"sni"`
 	// WSPath WebSocket path for transport vless-ws (VLESS + WS + TLS).
 	WSPath string `json:"ws_path,omitempty"`
+
+	// MDNSDomain is the tunnel subdomain for MasterDnsVPN (e.g., v.example.com).
+	MDNSDomain string `json:"mdns_domain,omitempty"`
 
 	Server struct {
 		Address string `json:"address"`
@@ -54,9 +58,6 @@ type RunSpec struct {
 		LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
 		LinuxRouter         bool `json:"linux_router,omitempty"`
 		LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
-		// HostMode is set by CLI/JSON; engine maps to typed network.HostMode ("lan" or "" for internet).
-		HostMode string `json:"host_mode,omitempty"`
-		LANRelax bool   `json:"lan_relax,omitempty"`
 	} `json:"behavior"`
 
 	Paths struct {
@@ -93,6 +94,9 @@ func Merge(base, override RunSpec) RunSpec {
 	}
 	if strings.TrimSpace(override.WSPath) != "" {
 		out.WSPath = strings.TrimSpace(override.WSPath)
+	}
+	if strings.TrimSpace(override.MDNSDomain) != "" {
+		out.MDNSDomain = strings.TrimSpace(override.MDNSDomain)
 	}
 	if strings.TrimSpace(override.Server.Address) != "" {
 		out.Server.Address = strings.TrimSpace(override.Server.Address)
@@ -145,12 +149,6 @@ func Merge(base, override RunSpec) RunSpec {
 	if override.Behavior.LinuxNoAutoOptimize {
 		out.Behavior.LinuxNoAutoOptimize = true
 	}
-	if strings.TrimSpace(override.Behavior.HostMode) != "" {
-		out.Behavior.HostMode = strings.TrimSpace(override.Behavior.HostMode)
-	}
-	if override.Behavior.LANRelax {
-		out.Behavior.LANRelax = true
-	}
 	if strings.TrimSpace(override.Paths.DataDir) != "" {
 		out.Paths.DataDir = strings.TrimSpace(override.Paths.DataDir)
 	}
@@ -180,6 +178,14 @@ func NormalizeTransport(t string) string {
 		return "ssh"
 	case "wireguard", "wg":
 		return "wireguard"
+	case "shadowsocks", "ss", "shadowsocks-rust":
+		return "shadowsocks"
+	case "shadowsocks-ws", "ss-ws":
+		return "shadowsocks-ws"
+	case "xdns", "vless-mkcp", "vless-dns", "dns-tunnel":
+		return "xdns"
+	case "mdns", "masterdns", "mdnsvpn":
+		return "mdns"
 	default:
 		return strings.ToLower(strings.TrimSpace(t))
 	}
@@ -209,6 +215,14 @@ func RunnerTransportFor(t string) string {
 		return "ssh"
 	case "wireguard":
 		return "wireguard"
+	case "shadowsocks":
+		return "shadowsocks"
+	case "shadowsocks-ws":
+		return "shadowsocks" // the runner is still the shadowsocks engine
+	case "xdns":
+		return "xdns"
+	case "mdns":
+		return "mdns"
 	default:
 		return NormalizeTransport(t)
 	}
@@ -220,11 +234,8 @@ func FillDefaults(s *RunSpec) {
 	if strings.EqualFold(strings.TrimSpace(s.Auth.UUID), "auto") || strings.TrimSpace(s.Auth.UUID) == "" {
 		s.Auth.UUID = provision.NormalizeUUID(s.Auth.UUID)
 	}
-	isLANMode := strings.EqualFold(strings.TrimSpace(s.Behavior.HostMode), "lan")
-	if !isLANMode {
-		if strings.EqualFold(strings.TrimSpace(s.Server.Address), "auto") || strings.TrimSpace(s.Server.Address) == "" {
-			s.Server.Address = provision.ResolveServerAddr(s.Server.Address)
-		}
+	if strings.EqualFold(strings.TrimSpace(s.Server.Address), "auto") || strings.TrimSpace(s.Server.Address) == "" {
+		s.Server.Address = provision.ResolveServerAddr(s.Server.Address)
 	}
 	if strings.EqualFold(strings.TrimSpace(s.Auth.SSHPass), "auto") || strings.TrimSpace(s.Auth.SSHPass) == "" {
 		s.Auth.SSHPass = installer.ReadOrCreateEmbedSSHPassword()
@@ -238,13 +249,21 @@ func FillDefaults(s *RunSpec) {
 	if s.Port == 0 {
 		switch s.Transport {
 		case "reality", "wss", "tls", "vless-ws", "vless-grpc":
-			s.Port = 443
+			s.Port = types.DefaultTLSTunnelListenPort
 		case "ssh-tls":
-			s.Port = 2053
+			s.Port = types.DefaultSSHTLSDirectListenPort
 		case "hysteria":
-			s.Port = 8443
+			s.Port = types.DefaultHysteriaListenPort
 		case "wireguard":
-			s.Port = 51820
+			s.Port = types.DefaultWireGuardListenPort
+		case "shadowsocks":
+			s.Port = types.DefaultShadowsocksListenPort
+		case "shadowsocks-ws":
+			s.Port = types.DefaultShadowsocksV2rayListenPort
+		case "xdns":
+			s.Port = types.DefaultXDNSListenPort
+		case "mdns":
+			s.Port = types.DefaultMDNSListenPort
 		case "ssh":
 			// SSH uses dynamic port allocation (0 triggers auto-assignment)
 			// Don't default to 22 to avoid conflicts with system SSH
@@ -261,7 +280,7 @@ func FillDefaults(s *RunSpec) {
 		}
 	}
 	if s.UDPGW.Port == 0 {
-		s.UDPGW.Port = 7300
+		s.UDPGW.Port = types.DefaultUDPGWPort
 	}
 	if s.Transport == "ssh-tls" {
 		s.UDPGW.Enabled = true

@@ -18,7 +18,7 @@ import (
 // GenerateHysteriaConfig writes server.yaml and client.yaml paths under configs/hysteria.
 func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultHysteriaListenPort
 	}
 
 	sharingSNIs := host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs)
@@ -190,7 +190,7 @@ func GenerateHysteriaURLForSNI(opt types.ConfigOptions, sni string) string {
 	// Extra query keys for sing-box / NekoBox-style clients: HTTP/3 ALPN, uTLS Chrome, TLS fragment (not record_fragment).
 	// Official hysteria ignores unknown parameters per URI scheme notes; subscribers and manual JSON import may use these.
 	tlsHints := "&alpn=h3&fp=chrome&fragment=1"
-	return fmt.Sprintf("hysteria2://%s@%s/?sni=%s&insecure=1%s%s#%s",
+	return fmt.Sprintf("hysteria2://%s@%s/?sni=%s&insecure=1&allowInsecure=true%s%s#%s",
 		opt.UUID, addr, url.QueryEscape(sni), obfsStr, tlsHints, url.QueryEscape(frag))
 }
 

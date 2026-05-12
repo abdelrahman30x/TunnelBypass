@@ -8,27 +8,10 @@ import (
 	"tunnelbypass/core/installer"
 	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/types"
-	"tunnelbypass/internal/network"
 )
 
 func lanSelfHostFileHeader(opt types.ConfigOptions) string {
-	if opt.NetworkProfile.Mode != network.LANMode {
-		return ""
-	}
-	p := opt.NetworkProfile
-	iface := strings.TrimSpace(p.SelectedInterface)
-	if iface == "" {
-		iface = "(none)"
-	}
-	return fmt.Sprintf(`# ┌─────────────────────────────────────────────────────┐
-# │  SELF-HOST / LAN MODE                               │
-# │  Server LAN IP  : %s
-# │  Detected via   : %s
-# │  Interface      : %s
-# │  Client and server must be on the same network.     │
-# └─────────────────────────────────────────────────────┘
-#
-`, p.PrimaryIP, p.ResolutionSource, iface)
+	return ""
 }
 
 func GenerateSSHConfig(opt types.ConfigOptions) (string, error) {

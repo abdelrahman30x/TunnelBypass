@@ -35,6 +35,12 @@ func verifyEmbeddedChecksum(tool, path string) error {
 		ver = EffectiveWstunnelVersion()
 	case "stunnel":
 		ver = EffectiveStunnelVersion()
+	case "shadowsocks":
+		ver = EffectiveShadowsocksVersion()
+	case "v2ray-plugin":
+		ver = EffectiveV2rayPluginVersion()
+	case "masterdnsvpn-server", "masterdnsvpn-client":
+		ver = EffectiveMasterDnsVPNVersion()
 	default:
 		return nil
 	}
@@ -55,7 +61,35 @@ func EnsureBinary(name string) (string, error) {
 	targetPath := filepath.Join(binDir, exeName)
 
 	if _, err := os.Stat(targetPath); err == nil {
-		if name == "wstunnel" && !isWstunnelVersionUsable(targetPath) {
+		if !IsVersionMatch(name, targetPath) {
+			installedVer := QueryInstalledVersion(name, targetPath)
+			requiredVer := versionForTool(name)
+			slog.Info("version mismatch detected", "tool", name, "installed", installedVer, "required", requiredVer)
+
+			runningServices := FindRunningServices(name)
+			processes, _ := FindRunningProcesses(name)
+
+			if len(runningServices) > 0 || len(processes) > 0 {
+				if len(runningServices) > 0 {
+					slog.Info("running services found", "tool", name, "services", runningServices)
+				}
+				if len(processes) > 0 {
+					slog.Info("running processes found", "tool", name, "count", len(processes))
+				}
+
+				if UpgradePromptFunc != nil {
+					if !UpgradePromptFunc(name, installedVer, requiredVer, runningServices, processes) {
+						slog.Info("user declined upgrade", "tool", name)
+						return targetPath, nil
+					}
+				}
+
+				_ = StopServicesForTool(name)
+				_ = KillProcessesByName(name)
+				time.Sleep(1 * time.Second)
+			}
+			_ = os.Remove(targetPath)
+		} else if name == "wstunnel" && !isWstunnelVersionUsable(targetPath) {
 			_ = os.Remove(targetPath)
 		} else if err := verifyEmbeddedChecksum(name, targetPath); err != nil {
 			slog.Info("checksum mismatch, redownloading", "tool", name)
@@ -78,6 +112,15 @@ func EnsureBinary(name string) (string, error) {
 	case "stunnel":
 		slog.Info("ensuring stunnel", "version", EffectiveStunnelVersion())
 		err = ensureStunnelBinary(binDir, targetPath)
+	case "shadowsocks":
+		slog.Info("downloading shadowsocks-rust", "version", EffectiveShadowsocksVersion())
+		err = ensureShadowsocksBinary(binDir, targetPath)
+	case "v2ray-plugin":
+		slog.Info("downloading v2ray-plugin", "version", EffectiveV2rayPluginVersion())
+		err = ensureV2rayPluginBinary(binDir, targetPath)
+	case "masterdnsvpn-server", "masterdnsvpn-client":
+		slog.Info("downloading masterdnsvpn", "version", EffectiveMasterDnsVPNVersion(), "component", name)
+		err = ensureMasterDnsVPNBinary(binDir, targetPath, name)
 	default:
 		return "", fmt.Errorf("unknown binary: %s", name)
 	}
@@ -106,6 +149,12 @@ func versionForTool(name string) string {
 		return EffectiveWstunnelVersion()
 	case "stunnel":
 		return EffectiveStunnelVersion()
+	case "shadowsocks":
+		return EffectiveShadowsocksVersion()
+	case "v2ray-plugin":
+		return EffectiveV2rayPluginVersion()
+	case "masterdnsvpn-server", "masterdnsvpn-client":
+		return EffectiveMasterDnsVPNVersion()
 	default:
 		return ""
 	}
@@ -562,4 +611,310 @@ func extractStunnelFromZip(zipPath, targetPath string) error {
 		}
 	}
 	return fmt.Errorf("stunnel.exe not found in zip")
+}
+
+func shadowsocksTargetTriple() string {
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+	switch {
+	case osName == "linux" && arch == "amd64":
+		return "x86_64-unknown-linux-gnu"
+	case osName == "linux" && arch == "arm64":
+		return "aarch64-unknown-linux-gnu"
+	case osName == "windows" && arch == "amd64":
+		return "x86_64-pc-windows-msvc"
+	case osName == "windows" && arch == "arm64":
+		return "aarch64-pc-windows-msvc"
+	default:
+		return fmt.Sprintf("%s-%s-unknown", arch, osName)
+	}
+}
+
+func getShadowsocksDownloadURLs() []string {
+	ver := EffectiveShadowsocksVersion()
+	triple := shadowsocksTargetTriple()
+	var out []string
+	// Primary: zip archive (works for both Linux and Windows on GitHub releases)
+	out = append(out, fmt.Sprintf(
+		"https://github.com/shadowsocks/shadowsocks-rust/releases/download/%s/shadowsocks-%s.%s.zip",
+		ver, ver, triple))
+	// Fallback: tar.xz for Linux
+	if runtime.GOOS != "windows" {
+		out = append(out, fmt.Sprintf(
+			"https://github.com/shadowsocks/shadowsocks-rust/releases/download/%s/shadowsocks-%s.%s.tar.xz",
+			ver, ver, triple))
+	}
+	return out
+}
+
+func ensureShadowsocksBinary(binDir, targetPath string) error {
+	ver := EffectiveShadowsocksVersion()
+	var lastErr error
+	for _, u := range getShadowsocksDownloadURLs() {
+		lower := strings.ToLower(u)
+		if strings.HasSuffix(lower, ".zip") {
+			if err := downloadAndExtractZip(u, binDir, "ssserver"); err != nil {
+				writeFetchMetaFail(binDir, "shadowsocks", u, ver, err.Error())
+				lastErr = err
+				continue
+			}
+			if _, err := os.Stat(targetPath); err == nil {
+				return nil
+			}
+			lastErr = fmt.Errorf("ssserver not found after zip extraction")
+			continue
+		}
+		if strings.HasSuffix(lower, ".tar.xz") || strings.HasSuffix(lower, ".tar.gz") {
+			archivePath := filepath.Join(binDir, "_dl_ss_archive")
+			_ = os.MkdirAll(filepath.Dir(archivePath), 0755)
+			if err := downloadFileWithProgress(u, archivePath); err != nil {
+				lastErr = err
+				continue
+			}
+			if err := extractTarGzBinary(archivePath, targetPath, "ssserver"); err != nil {
+				_ = os.Remove(archivePath)
+				lastErr = err
+				continue
+			}
+			_ = os.Remove(archivePath)
+			return nil
+		}
+		// Direct binary download
+		if err := downloadFileWithProgress(u, targetPath); err != nil {
+			writeFetchMetaFail(binDir, "shadowsocks", u, ver, err.Error())
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no download URLs")
+	}
+	return fmt.Errorf("shadowsocks: %w", lastErr)
+}
+
+func getV2rayPluginDownloadURLs() []string {
+	ver := EffectiveV2rayPluginVersion()
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+	filename := fmt.Sprintf("v2ray-plugin-%s-%s-%s.tar.gz", osName, arch, ver)
+	return []string{
+		fmt.Sprintf("https://github.com/teddysun/v2ray-plugin/releases/download/%s/%s", ver, filename),
+	}
+}
+
+func ensureV2rayPluginBinary(binDir, targetPath string) error {
+	ver := EffectiveV2rayPluginVersion()
+	var lastErr error
+	for _, u := range getV2rayPluginDownloadURLs() {
+		archivePath := filepath.Join(binDir, "_dl_v2p_archive")
+		_ = os.MkdirAll(filepath.Dir(archivePath), 0755)
+		if err := downloadFileWithProgress(u, archivePath); err != nil {
+			writeFetchMetaFail(binDir, "v2ray-plugin", u, ver, err.Error())
+			lastErr = err
+			continue
+		}
+
+		// The tar.gz contains "v2ray-plugin_windows_amd64.exe" or "v2ray-plugin_linux_amd64"
+		osName := runtime.GOOS
+		arch := runtime.GOARCH
+		expectedName := fmt.Sprintf("v2ray-plugin_%s_%s", osName, arch)
+
+		if err := extractTarGzBinary(archivePath, targetPath, expectedName); err != nil {
+			_ = os.Remove(archivePath)
+			lastErr = err
+			continue
+		}
+		_ = os.Remove(archivePath)
+		return nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no download URLs")
+	}
+	return fmt.Errorf("v2ray-plugin: %w", lastErr)
+}
+
+
+func masterDnsVPNOSName() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "Windows"
+	case "darwin":
+		return "MacOS"
+	case "linux":
+		return "Linux"
+	default:
+		return strings.Title(runtime.GOOS)
+	}
+}
+
+func masterDnsVPNArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "AMD64"
+	case "arm64":
+		return "ARM64"
+	case "386":
+		return "X86"
+	case "arm":
+		return "ARMV7"
+	default:
+		return strings.ToUpper(runtime.GOARCH)
+	}
+}
+
+func getMasterDnsVPNDownloadURLs(component string) []string {
+	ver := EffectiveMasterDnsVPNVersion()
+	osName := masterDnsVPNOSName()
+	arch := masterDnsVPNArch()
+	// component is "masterdnsvpn-server" or "masterdnsvpn-client"
+	shortComp := strings.TrimPrefix(component, "masterdnsvpn-")
+	shortComp = strings.Title(shortComp)
+	var out []string
+	out = append(out, fmt.Sprintf(
+		"https://github.com/masterking32/MasterDnsVPN/releases/download/%s/MasterDnsVPN_%s_%s_%s.zip",
+		ver, shortComp, osName, arch))
+	out = append(out, fmt.Sprintf(
+		"https://github.com/masterking32/MasterDnsVPN/releases/download/%s/MasterDnsVPN_%s_%s_%s.tar.gz",
+		ver, shortComp, osName, arch))
+	return out
+}
+
+func ensureMasterDnsVPNBinary(binDir, targetPath, component string) error {
+	ver := EffectiveMasterDnsVPNVersion()
+	var lastErr error
+	for _, u := range getMasterDnsVPNDownloadURLs(component) {
+		lower := strings.ToLower(u)
+		if strings.HasSuffix(lower, ".zip") {
+			tmpZip := filepath.Join(binDir, "_dl_mdns.zip")
+			if err := downloadFileWithProgress(u, tmpZip); err != nil {
+				writeFetchMetaFail(binDir, component, u, ver, err.Error())
+				lastErr = err
+				continue
+			}
+			if err := extractMasterDnsVPNFromZip(tmpZip, targetPath, component); err != nil {
+				_ = os.Remove(tmpZip)
+				lastErr = err
+				continue
+			}
+			_ = os.Remove(tmpZip)
+			return nil
+		}
+		if strings.HasSuffix(lower, ".tar.gz") {
+			archivePath := filepath.Join(binDir, "_dl_mdns_archive")
+			_ = os.MkdirAll(filepath.Dir(archivePath), 0755)
+			if err := downloadFileWithProgress(u, archivePath); err != nil {
+				writeFetchMetaFail(binDir, component, u, ver, err.Error())
+				lastErr = err
+				continue
+			}
+			if err := extractMasterDnsVPNFromTarGz(archivePath, targetPath, component); err != nil {
+				_ = os.Remove(archivePath)
+				lastErr = err
+				continue
+			}
+			_ = os.Remove(archivePath)
+			return nil
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no download URLs")
+	}
+	return fmt.Errorf("masterdnsvpn: %w", lastErr)
+}
+
+func extractMasterDnsVPNFromZip(zipPath, targetPath, component string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	// MasterDnsVPN release archives contain files like:
+	//   MasterDnsVPN_Server_Windows_AMD64_v2026.05.04.123456-38b73de.exe
+	//   MasterDnsVPN_Client_Linux_AMD64_v2026.05.04.123456-38b73de
+	shortComp := strings.TrimPrefix(component, "masterdnsvpn-")
+	shortComp = strings.Title(shortComp)
+	prefix := "MasterDnsVPN_" + shortComp + "_"
+
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		base := filepath.Base(f.Name)
+		if strings.HasPrefix(base, prefix) {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			out, err := os.Create(targetPath)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+			_, err = io.Copy(out, rc)
+			if err != nil {
+				return err
+			}
+			if runtime.GOOS != "windows" {
+				_ = os.Chmod(targetPath, 0755)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no file matching %s found in zip", prefix)
+}
+
+func extractMasterDnsVPNFromTarGz(archivePath, targetPath, component string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+
+	shortComp := strings.TrimPrefix(component, "masterdnsvpn-")
+	shortComp = strings.Title(shortComp)
+	prefix := "MasterDnsVPN_" + shortComp + "_"
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if hdr == nil || hdr.Typeflag == tar.TypeDir {
+			continue
+		}
+
+		base := filepath.Base(hdr.Name)
+		if strings.HasPrefix(base, prefix) {
+			out, err := os.Create(targetPath)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, tr); err != nil {
+				out.Close()
+				return err
+			}
+			if err := out.Close(); err != nil {
+				return err
+			}
+			if runtime.GOOS != "windows" {
+				_ = os.Chmod(targetPath, 0755)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no file matching %s found in tar.gz", prefix)
 }

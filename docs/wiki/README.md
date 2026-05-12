@@ -26,6 +26,6 @@ For install commands and quick copy-paste, start from the [root README](../../RE
 | [Installation](Installation.md) | Build from source, install scripts, data dirs | You need binaries or paths |
 | [Transports](Transports.md) | Choosing a stack, stealth trade-offs, clients | You’re picking a protocol |
 | [Linux networking](Linux-networking.md) | Transit sysctl, iptables, autopilot, safe rollback | Server is Linux and you use network tuning |
-| [Operations](Operations.md) | `status`, `health`, uninstall, portable mode, LAN `--self-host` | Day-to-day commands |
+| [Operations](Operations.md) | `status`, `health`, uninstall, portable mode | Day-to-day commands |
 
 Use `tunnelbypass run -help` for the full flag list.

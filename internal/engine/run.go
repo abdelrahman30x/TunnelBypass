@@ -10,15 +10,14 @@ import (
 	"strings"
 
 	"tunnelbypass/core/installer"
-	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/provision"
+	tbssh "tunnelbypass/core/ssh"
 	"tunnelbypass/core/svcinstall"
 	"tunnelbypass/core/transport"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
-	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/elevate"
 	"tunnelbypass/internal/network"
 	"tunnelbypass/internal/runtimeenv"
@@ -35,7 +34,7 @@ func externalPortFor(transport string, spec cfg.RunSpec) (int, string) {
 			return spec.UDPGW.Port, "tcp"
 		}
 		return 7300, "tcp"
-	case "hysteria", "wireguard":
+	case "hysteria", "wireguard", "xdns":
 		return spec.Port, "udp"
 	case "ssh", "wss", "tls":
 		// For SSH-based transports, use SSH.Port (the backend SSH port)
@@ -66,7 +65,7 @@ func conflictCommandHint(spec cfg.RunSpec) string {
 
 func transportInstallsOSService(transport string) bool {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
-	case "reality", "vless", "vless-ws", "ssh-tls", "hysteria", "wireguard", "wss", "tls":
+	case "reality", "vless", "vless-ws", "ssh-tls", "hysteria", "wireguard", "wss", "tls", "shadowsocks", "shadowsocks-ws", "xdns":
 		return true
 	default:
 		return false
@@ -81,28 +80,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		spec.Behavior.Daemon = false
 	}
 
-	hostMode, ok := network.ParseHostMode(spec.Behavior.HostMode)
-	if !ok {
-		return fmt.Errorf("invalid host_mode %q; expected 'lan' or '' (internet)", spec.Behavior.HostMode)
-	}
-	secProfile := network.StrictLAN
-	if spec.Behavior.LANRelax {
-		secProfile = network.RelaxedLAN
-	}
-	netProf, err := network.ResolveProfile(network.ProfileOptions{
-		Mode:        hostMode,
-		CLIServer:   strings.TrimSpace(spec.Server.Address),
-		EnvOverride: os.Getenv("TUNNELBYPASS_LAN_IP"),
-		Security:    secProfile,
-		Logger:      tblog.Sub("network"),
-		Trace:       debug.Enabled(),
-	})
-	if err != nil {
-		return fmt.Errorf("network profile: %w", err)
-	}
-	if hostMode == network.LANMode {
-		spec.Server.Address = netProf.PrimaryIP
-	}
+	netProf := network.NetworkProfile{}
 
 	cfg.FillDefaults(&spec)
 	if err := cfg.Validate(spec); err != nil {
@@ -146,16 +124,17 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 
 	log := tblog.Sub("engine")
 	opt := types.ConfigOptions{
-		Transport:      spec.Transport,
-		ServerAddr:     strings.TrimSpace(spec.Server.Address),
-		Port:           spec.Port,
-		UUID:           strings.TrimSpace(spec.Auth.UUID),
-		Sni:            strings.TrimSpace(spec.SNI),
-		WSPath:         strings.TrimSpace(spec.WSPath),
-		Host:           strings.TrimSpace(spec.Server.Address),
-		SSHUser:        strings.TrimSpace(spec.Auth.SSHUser),
-		SSHPassword:    strings.TrimSpace(spec.Auth.SSHPass),
-		SSHBackendPort: spec.SSH.Port, // Pass SSH port to provisioning
+		Transport:           spec.Transport,
+		ServerAddr:          strings.TrimSpace(spec.Server.Address),
+		Port:                spec.Port,
+		UUID:                strings.TrimSpace(spec.Auth.UUID),
+		Sni:                 strings.TrimSpace(spec.SNI),
+		WSPath:              strings.TrimSpace(spec.WSPath),
+		Host:                strings.TrimSpace(spec.Server.Address),
+		SSHUser:             strings.TrimSpace(spec.Auth.SSHUser),
+		SSHPassword:         strings.TrimSpace(spec.Auth.SSHPass),
+		SSHBackendPort:      spec.SSH.Port, // Pass SSH port to provisioning
+		MDNSDomain:          strings.TrimSpace(spec.MDNSDomain),
 		LinuxOptimizeNet:    spec.Behavior.LinuxOptimizeNet,
 		LinuxDNSFix:         spec.Behavior.LinuxDNSFix,
 		LinuxRouter:         spec.Behavior.LinuxRouter,
@@ -173,19 +152,8 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		spec.SSH.Port = res.SSHPort
 	}
 
-	lanMode := hostMode == network.LANMode
-	if lanMode {
-		printLANSecurityBanner()
-		if w := network.ValidateReachability(netProf, spec.Transport, spec.Port); w != "" {
-			fmt.Fprintln(os.Stderr, w)
-		}
-		PrintSelfHostSummary(spec, res, netProf)
-	}
-
 	if spec.Behavior.GenerateOnly || !spec.Behavior.AutoStart {
-		if !lanMode {
-			PrintResult(spec, res)
-		}
+		PrintResult(spec, res)
 		return nil
 	}
 
@@ -195,9 +163,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		if runtime.GOOS == "linux" {
 			installer.EvaluateLinuxAutopilot(&opt)
 		}
-		if !lanMode {
-			PrintResult(spec, res)
-		}
+		PrintResult(spec, res)
 		if err := svcinstall.InstallRunTransportService(spec.Transport, opt, elevate.IsAdmin()); err != nil {
 			return err
 		}
@@ -222,16 +188,14 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	if spec.Transport == "tls" {
 		pOpts.StunnelAccept = spec.Port
 	}
-	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" || spec.Transport == "ssh-tls" {
+	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" || spec.Transport == "ssh-tls" || spec.Transport == "shadowsocks" || spec.Transport == "shadowsocks-ws" || spec.Transport == "xdns" {
 		pOpts.ConfigPath = res.ServerConfigPath
 	}
 
 	runOne := func(c context.Context) error {
 		return portable.RunNamed(c, tblog.Sub("run"), cfg.RunnerTransportFor(spec.Transport), pOpts)
 	}
-	if !lanMode {
-		PrintResult(spec, res)
-	}
+	PrintResult(spec, res)
 	if spec.Behavior.Daemon {
 		RunDaemonLoop(ctx, spec.Transport, runOne)
 		return nil
@@ -326,11 +290,11 @@ func printPrettySSHTLSDirectConnect(spec cfg.RunSpec, res transport.Result, endp
 // printPrettyClientTunnel is the compact ssh/tls/wss summary (one box, no instruction file dump).
 func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, transportName string) {
 	dataDir := installer.GetBaseDir()
-	
+
 	// Get internal and external SSH ports
 	internalPort := installer.GetSSHBackendPort()
 	externalPort := installer.GetSSHExternalPort()
-	
+
 	// For TLS, port config can reflect local stunnel accept / forwarder ports.
 	// For WSS, internal is the server SSH backend through the tunnel; "external" is the
 	// client-side local port (wstunnel -L / ssh -p), not the server's forwarder ExternalPort.
@@ -351,7 +315,7 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 		}
 		externalPort = tbssh.WSSClientLocalSSHPort()
 	}
-	
+
 	// Fallback if not set
 	if internalPort <= 0 {
 		internalPort = spec.SSH.Port
@@ -359,7 +323,7 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 	if externalPort <= 0 {
 		externalPort = internalPort
 	}
-	
+
 	sni := strings.TrimSpace(spec.SNI)
 
 	fmt.Printf("\n%s╔══════════════════════════════════════════════════════════════╗%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
@@ -469,7 +433,7 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 	}
 
 	switch transportName {
-	case "reality", "hysteria", "vless-ws":
+	case "reality", "hysteria", "vless-ws", "shadowsocks", "shadowsocks-ws":
 		if res.SharingLink != "" {
 			fmt.Printf("\n  %s════════════════════════════════════════════════════════════%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
 			fmt.Printf("  %s                [ SHARING LINK - COPY THIS ]%s\n", uicolors.ColorBold+uicolors.ColorGreen, uicolors.ColorReset)
@@ -479,6 +443,12 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 		}
 		fmt.Printf("\n  %s[ SCAN FOR MOBILE APPS ]%s\n", uicolors.ColorYellow, uicolors.ColorReset)
 		fmt.Printf("  %sUse your client app import / subscription from the sharing link above.%s\n", uicolors.ColorGray, uicolors.ColorReset)
+		if transportName == "shadowsocks-ws" {
+			fmt.Printf("\n  %s[!] NekoBox / sing-box DNS:%s\n", uicolors.ColorBold+uicolors.ColorYellow, uicolors.ColorReset)
+			fmt.Printf("  %sIf logs show dns: lookup failed … context deadline exceeded and outbound/shadowsocks to 8.8.8.8:53,%s\n", uicolors.ColorGray, uicolors.ColorReset)
+			fmt.Printf("  %sDNS (UDP) is traversing the tunnel and often stalls with v2ray-plugin. Fix: use Direct or system DNS in NekoBox, or in sing-box use detour: direct for DNS servers. See docs/wiki/Transports.md#nekobox-dns.%s\n",
+				uicolors.ColorGray, uicolors.ColorReset)
+		}
 	case "wireguard":
 		fmt.Printf("\n  %s[ WIREGUARD CLIENT ]%s\n", uicolors.ColorYellow, uicolors.ColorReset)
 		if res.ClientConfigPath != "" {
@@ -506,46 +476,4 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 			fmt.Printf("  %s════════════════════════════════════════════════════════════%s\n", uicolors.ColorBold+uicolors.ColorCyan, uicolors.ColorReset)
 		}
 	}
-}
-
-func printLANSecurityBanner() {
-	fmt.Fprintln(os.Stderr, "⚠️ LAN SELF-HOST MODE ACTIVE")
-}
-
-// PrintSelfHostSummary prints a single LAN-mode summary after provisioning.
-func PrintSelfHostSummary(spec cfg.RunSpec, res transport.Result, prof network.NetworkProfile) {
-	fmt.Println("\n--- LAN self-host ---")
-	if prof.Security == network.StrictLAN {
-		fmt.Println("Strict LAN (default): Xray-based transports use BlockPrivate — outbound traffic to other private IPs is blocked. Use --lan-relax only if you need full LAN routing.")
-	} else {
-		fmt.Println("Relaxed LAN (--lan-relax): the tunnel may reach any host on your LAN. Use only on isolated, trusted networks.")
-	}
-	fmt.Println()
-	fmt.Printf("Primary IP:    %s\n", prof.PrimaryIP)
-	fmt.Printf("Resolved via:  %s\n", prof.ResolutionSource)
-	if prof.SelectedInterface != "" {
-		fmt.Printf("Interface:     %s\n", prof.SelectedInterface)
-	}
-	fmt.Printf("Transport:     %s\n", spec.Transport)
-	fmt.Printf("Listen port:   %d\n", spec.Port)
-	if strings.TrimSpace(spec.SNI) != "" {
-		fmt.Printf("SNI:           %s\n", spec.SNI)
-	}
-	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss" || spec.Transport == "ssh-tls"
-	if tunnelSSH && spec.SSH.Port > 0 {
-		fmt.Printf("SSH port:      %d\n", spec.SSH.Port)
-	}
-	if res.SharingLink != "" {
-		fmt.Printf("\nSharing link / import:\n%s\n", res.SharingLink)
-	}
-	if res.ServerConfigPath != "" {
-		fmt.Printf("Server config: %s\n", res.ServerConfigPath)
-	}
-	if res.ClientConfigPath != "" {
-		fmt.Printf("Client config: %s\n", res.ClientConfigPath)
-	}
-	if res.InstructionPath != "" {
-		fmt.Printf("Instructions:  %s\n", res.InstructionPath)
-	}
-	fmt.Println("\nReach this server from other LAN devices using the primary IP and port above (same subnet).")
 }

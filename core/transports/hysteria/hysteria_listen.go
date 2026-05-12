@@ -3,12 +3,14 @@ package hysteria
 import (
 	"strconv"
 	"strings"
+
+	"tunnelbypass/core/types"
 )
 
 // ListenAddr returns the server listen field as "0.0.0.0:port" for IPv4-friendly bind.
 func ListenAddr(port int) string {
 	if port <= 0 {
-		port = 443
+		port = types.DefaultHysteriaListenPort
 	}
 	return "0.0.0.0:" + strconv.Itoa(port)
 }
@@ -20,7 +22,7 @@ func ClientServerAddr(endpoint string, port int) string {
 		endpoint = "127.0.0.1"
 	}
 	if port <= 0 {
-		port = 443
+		port = types.DefaultHysteriaListenPort
 	}
 	return endpoint + ":" + strconv.Itoa(port)
 }

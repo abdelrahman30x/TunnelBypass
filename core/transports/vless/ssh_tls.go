@@ -73,7 +73,7 @@ func OpenSSLVerifyTLS13AES256Command(host string, port int, serverName string) s
 	}
 	sni := strings.TrimSpace(serverName)
 	if port <= 0 {
-		port = 443
+		port = types.DefaultTLSTunnelListenPort
 	}
 	if sni == "" {
 		return fmt.Sprintf("openssl s_client -connect %s:%d -tls1_3 -ciphersuites TLS_AES_256_GCM_SHA384", host, port)
@@ -85,7 +85,7 @@ func OpenSSLVerifyTLS13AES256Command(host string, port int, serverName string) s
 // sshFallbackDest must be a host:port string such as "127.0.0.1:4022".
 func GenerateVlessSSHDirectTLSServerConfig(opt types.ConfigOptions, sshFallbackDest string) (string, error) {
 	if opt.Port == 0 {
-		opt.Port = 2053
+		opt.Port = types.DefaultSSHTLSDirectListenPort
 	}
 	opt.UUID = strings.TrimSpace(opt.UUID)
 	if opt.UUID == "" {
@@ -293,9 +293,8 @@ func GenerateVlessSSHDirectTLSClientConfig(opt types.ConfigOptions) (string, err
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "info",
-			"access":   getAbsLogPath("xray_ssh_tls_access.log"),
-			"error":    getAbsLogPath("xray_ssh_tls_error.log"),
 		},
+		"inbounds":  BuildClientInbounds(),
 		"outbounds": []interface{}{outbound},
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tbssh "tunnelbypass/core/ssh"
+	"tunnelbypass/core/types"
 )
 
 func isBindConflict(err error) bool {
@@ -25,7 +26,7 @@ func depPortHint(depName string, o Options) int {
 		if o.UDPGWPort > 0 {
 			return o.UDPGWPort
 		}
-		return 7300
+		return types.DefaultUDPGWPort
 	case "ssh":
 		p := o.SSHPort
 		if p <= 0 {
@@ -197,7 +198,7 @@ func waitOneDependency(ctx context.Context, dep string, o Options, log *slog.Log
 	case "udpgw":
 		p := o.UDPGWPort
 		if p <= 0 {
-			p = 7300
+			p = types.DefaultUDPGWPort
 		}
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
 		if err := probeTCPWithRetry(ctx, addr, log, "udpgw"); err != nil {
@@ -214,7 +215,7 @@ func waitOneDependency(ctx context.Context, dep string, o Options, log *slog.Log
 		}
 		up := o.UDPGWPort
 		if up <= 0 {
-			up = 7300
+			up = types.DefaultUDPGWPort
 		}
 		uaddr := fmt.Sprintf("127.0.0.1:%d", up)
 		if err := probeTCPWithRetry(ctx, uaddr, log, "udpgw"); err != nil {
