@@ -31,3 +31,45 @@ dep_server.txt
 .qwen/
 *.DS_Store
 Thumbs.db
+
+# Temporary repositories
+/tmp-repos/
+
+# Environment variables
+.env
+*.env.local
+
+# Logs
+logs/
+*.log
+
+# Backup files
+backup/
+*.backup
+
+# Test files
+test/
+*.test
+*.test.go
+*.test.sh
+*.test.py
+*.test.rb
+*.test.php
+*.test.html
+*.test.css
+*.test.js
+*.test.json
+*.test.xml
+*.test.yml
+*.test.yaml
+*.test.md
+*.test.txt
+*.test.csv
+*.test.xls
+*.test.xlsx
+*.test.pdf
+*.test.doc
+*.test.docx
+*.test.ppt
+*.test.pptx
+*.test.odt
