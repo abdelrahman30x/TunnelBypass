@@ -3,11 +3,12 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 # Default: latest published GitHub release (no version required).
+# Default install: $HOME/.local/bin. Re-running does not duplicate the PATH line in your profile.
 # Environment (optional):
 #   INSTALL_OWNER   default: abdelrahman30x
 #   INSTALL_REPO    default: TunnelBypass
 #   INSTALL_VERSION only if you must pin a tag (e.g. v1.2.1); otherwise omit for latest
-#   INSTALL_PREFIX  if set, copy binary to this directory (e.g. $HOME/.local/bin or /usr/local/bin)
+#   INSTALL_PREFIX  install directory (default: $HOME/.local/bin)
 
 set -euo pipefail
 
@@ -45,6 +46,12 @@ case "$OS" in
     exit 1
     ;;
 esac
+
+if [[ -z "$PREFIX" ]]; then
+  PREFIX="${HOME}/.local/bin"
+fi
+mkdir -p "$PREFIX"
+PREFIX="$(cd "$PREFIX" && pwd)"
 
 if [[ -n "$VERSION" ]]; then
   API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${VERSION}"
@@ -148,27 +155,50 @@ fi
 
 chmod +x "$BIN" 2>/dev/null || true
 
-if [[ -n "$PREFIX" ]]; then
-  mkdir -p "$PREFIX"
-  cp -f "$BIN" "${PREFIX}/tunnelbypass"
-  chmod 0755 "${PREFIX}/tunnelbypass"
-  say "[+] Installed: ${PREFIX}/tunnelbypass"
-  INSTALLED_BIN="${PREFIX}/tunnelbypass"
-  case ":$PATH:" in
-    *":$PREFIX:"*) ;;
-    *) say "[!] Add to PATH, e.g.: export PATH=\"$PREFIX:\$PATH\"" ;;
-  esac
-else
-  OUT="$(pwd)/tunnelbypass"
-  cp -f "$BIN" "$OUT"
-  chmod +x "$OUT"
-  say "[+] Binary ready: $OUT"
-  INSTALLED_BIN="$OUT"
+cp -f "$BIN" "${PREFIX}/tunnelbypass"
+chmod 0755 "${PREFIX}/tunnelbypass"
+
+say "[+] Installed: ${PREFIX}/tunnelbypass"
+
+path_in_shell_profile() {
+  local marker='# TunnelBypass PATH (install.sh)'
+  local home="${HOME}"
+  local export_line="export PATH=\"${PREFIX}:\$PATH\""
+  local target=""
+  for c in "${home}/.zprofile" "${home}/.profile"; do
+    if [[ -f "$c" ]]; then
+      target="$c"
+      break
+    fi
+  done
+  if [[ -z "$target" ]]; then
+    target="${home}/.profile"
+  fi
+  if [[ -f "$target" ]] && grep -Fq "$marker" "$target" 2>/dev/null; then
+    return 0
+  fi
+  if [[ -f "$target" ]] && grep -Fq "export PATH=\"${PREFIX}:" "$target" 2>/dev/null; then
+    return 0
+  fi
+  {
+    printf '\n%s\n%s\n' "$marker" "$export_line"
+  } >>"$target"
+  say "[+] Updated $target — open a new shell or: source $target"
+}
+
+case ":${PATH:-}:" in
+  *":${PREFIX}:"*) ;;
+  *)
+    path_in_shell_profile
+    say "[i] This session may not include $PREFIX yet. Run once:"
+    say "    export PATH=\"${PREFIX}:\$PATH\""
+    ;;
+esac
+
+INSTALLED_BIN="${PREFIX}/tunnelbypass"
+VERSION_OUT="$("$INSTALLED_BIN" --version 2>/dev/null || true)"
+if [[ -n "$VERSION_OUT" ]]; then
+  say "    Version: $VERSION_OUT"
 fi
 
-VERSION="$("$INSTALLED_BIN" --version 2>/dev/null || true)"
-if [[ -n "$VERSION" ]]; then
-  say "    Version: $VERSION"
-fi
-
-say "    Run: ./tunnelbypass"
+say "    Run: tunnelbypass"

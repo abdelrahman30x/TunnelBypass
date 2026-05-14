@@ -10,11 +10,14 @@
     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
   Default: latest published GitHub release (no version variable needed).
+  Installs to %LOCALAPPDATA%\TunnelBypass, adds that folder to your user PATH, and writes TunnelBypass.cmd / tb.cmd shims.
+  Re-running is safe: the install directory is only added to user PATH once (not duplicated).
+
   Optional environment variables:
     $env:INSTALL_OWNER   (default: abdelrahman30x)
     $env:INSTALL_REPO    (default: TunnelBypass)
     $env:INSTALL_VERSION only to pin a tag (e.g. v1.2.1); leave unset for latest
-    $env:INSTALL_PREFIX  (directory to install tunnelbypass.exe; default: current directory)
+    $env:INSTALL_PREFIX  override install directory (default: %LOCALAPPDATA%\TunnelBypass)
 #>
 
 [CmdletBinding()]
@@ -43,8 +46,16 @@ else {
 
 $wantSub = "_windows_${archGo}"
 if (-not $InstallDir) {
-    $InstallDir = if ($env:INSTALL_PREFIX) { $env:INSTALL_PREFIX } else { (Get-Location).Path }
+    if ($env:INSTALL_PREFIX) {
+        $InstallDir = $env:INSTALL_PREFIX
+    } else {
+        $la = $env:LOCALAPPDATA
+        if (-not $la) { $la = Join-Path $env:USERPROFILE "AppData\Local" }
+        $InstallDir = Join-Path $la "TunnelBypass"
+    }
 }
+
+$InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 
 $api = if ($Version) {
     "https://api.github.com/repos/$Owner/$Repo/releases/tags/$Version"
@@ -74,36 +85,77 @@ if (-not $asset) {
 
 $url = $asset.browser_download_url
 $name = $asset.name
-Write-Host "[*] Downloading: $name"
-
-$tmp = Join-Path $env:TEMP ("tb-setup-" + [Guid]::NewGuid().ToString("n") + ".exe")
-try {
-    Invoke-WebRequest -Uri $url -OutFile $tmp -Headers @{ "User-Agent" = "TunnelBypass-Install" } -UseBasicParsing
-} catch {
-    throw "Download failed: $_"
-}
 
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
 $dest = Join-Path $InstallDir "tunnelbypass.exe"
+Write-Host "[*] Downloading: $name"
+$tmp = Join-Path $env:TEMP ("tb-setup-" + [Guid]::NewGuid().ToString("n") + ".exe")
+try {
+    Invoke-WebRequest -Uri $url -OutFile $tmp -Headers @{ "User-Agent" = "TunnelBypass-Install" } -UseBasicParsing
+} catch {
+    throw "Download failed: $_"
+}
 Copy-Item -Path $tmp -Destination $dest -Force
 Remove-Item -Force $tmp
 
+# CMD shims so "TunnelBypass" / "tb" resolve (PATHEXT includes .cmd)
+$shim = "@echo off`r`n" + '"%~dp0tunnelbypass.exe" %*' + "`r`n"
+Set-Content -LiteralPath (Join-Path $InstallDir "TunnelBypass.cmd") -Value $shim -Encoding ascii -NoNewline
+Set-Content -LiteralPath (Join-Path $InstallDir "tb.cmd") -Value $shim -Encoding ascii -NoNewline
+
+function Add-TunnelBypassUserPath {
+    param([string]$Dir)
+    $d = $Dir.TrimEnd('\')
+    $cur = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($null -eq $cur) { $cur = '' }
+    $found = $false
+    foreach ($x in ($cur -split ';')) {
+        $t = $x.Trim().TrimEnd('\')
+        if ($t -ne '' -and $t -ieq $d) { $found = $true; break }
+    }
+    if (-not $found) {
+        $n = if ($cur.Trim() -eq '') { $d } else { ($cur.TrimEnd(';') + ';' + $d) }
+        [Environment]::SetEnvironmentVariable('Path', $n, 'User')
+        Write-Host "[+] Added to user PATH: $d"
+    } else {
+        Write-Host "[*] User PATH already lists: $d"
+    }
+    try {
+        if (-not ('TunnelBypassEnvBroadcast' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class TunnelBypassEnvBroadcast {
+  [DllImport("user32.dll", CharSet=CharSet.Auto, SetLastError=false)]
+  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+}
+'@
+        }
+        [IntPtr]$r = [IntPtr]::Zero
+        [void][TunnelBypassEnvBroadcast]::SendMessageTimeout([IntPtr]0xffff, 26, [IntPtr]::Zero, "Environment", 2, 5000, [ref]$r)
+    } catch {}
+}
+
+Add-TunnelBypassUserPath -Dir $InstallDir
+
 Write-Host "[+] Installed: $dest"
 try {
-    $version = & $dest --version 2>$null
-    if ($version) {
-        Write-Host "    Version: $version"
-    }
-} catch {
-}
-Write-Host "    Run: tunnelbypass.exe"
-$inPath = $false
+    $verOut = & $dest --version 2>$null
+    if ($verOut) { Write-Host "    Version: $verOut" }
+} catch {}
+
+$sessionHas = $false
 foreach ($p in ($env:Path -split ';')) {
-    if ($p -and (Test-Path $p) -and ((Resolve-Path $InstallDir).Path -eq (Resolve-Path $p).Path)) { $inPath = $true; break }
+    $t = $p.Trim().TrimEnd('\')
+    if ($t -ne '' -and $t -ieq $InstallDir.TrimEnd('\')) { $sessionHas = $true; break }
 }
-if (-not $inPath) {
-    Write-Host "[!] If needed, add to PATH: $InstallDir"
+if (-not $sessionHas) {
+    Write-Host "[i] This window was started before PATH changed. Use a new terminal, or for this session:"
+    Write-Host "    `$env:Path = `"$InstallDir;`$env:Path`""
+    Write-Host "    (cmd.exe)  set PATH=$InstallDir;%PATH%"
 }
+
+Write-Host "    From any folder (after PATH is visible): tunnelbypass  |  TunnelBypass  |  tb"
