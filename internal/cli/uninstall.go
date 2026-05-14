@@ -39,7 +39,7 @@ func runUninstallCLI(args []string) {
 		serviceName = portable.OSServiceNameForTransport(*typ)
 	}
 	if serviceName == "" {
-		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|ssh-tls|hysteria|wireguard|wss|tls")
+		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|ssh-tls|hysteria|wireguard|wss|tls|mdns")
 		os.Exit(2)
 	}
 	if strings.TrimSpace(*dataDir) != "" {

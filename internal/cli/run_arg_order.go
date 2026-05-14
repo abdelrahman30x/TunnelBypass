@@ -17,6 +17,7 @@ var canonicalRunTransports = map[string]struct{}{
 	"hysteria":    {},
 	"ssh":         {},
 	"wireguard":   {},
+	"xdns":        {},
 }
 
 func isKnownRunTransportToken(tok string) bool {

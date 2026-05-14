@@ -26,8 +26,12 @@ const (
 	transportWSS       installedTransport = "wss"
 	transportSSHTLS    installedTransport = "ssh-tls"
 	transportGRPC      installedTransport = "grpc"
-	transportUDPGW     installedTransport = "udpgw"
-	transportUnknown   installedTransport = "unknown"
+	transportUDPGW       installedTransport = "udpgw"
+	transportShadowsocks installedTransport = "shadowsocks"
+	transportShadowsocksWS installedTransport = "shadowsocks-ws"
+	transportXDNS          installedTransport = "xdns"
+	transportMDNS          installedTransport = "mdns"
+	transportUnknown       installedTransport = "unknown"
 )
 
 func detectInstalledTransport(serviceName string) installedTransport {
@@ -49,8 +53,16 @@ func detectInstalledTransport(serviceName string) installedTransport {
 		return transportWSS
 	case strings.Contains(s, "ssl"):
 		return transportSSL
+	case strings.Contains(s, "shadowsocks-ws"):
+		return transportShadowsocksWS
+	case strings.Contains(s, "shadowsocks"):
+		return transportShadowsocks
 	case strings.Contains(s, "udpgw"):
 		return transportUDPGW
+	case strings.Contains(s, "xdns"):
+		return transportXDNS
+	case strings.Contains(s, "mdns"), strings.Contains(s, "masterdnsvpn"):
+		return transportMDNS
 	case strings.Contains(s, "vless"), strings.Contains(s, "udp"), strings.Contains(s, "tunnel"):
 		return transportXray
 	default:
@@ -75,6 +87,15 @@ func detectInstalledTransport(serviceName string) installedTransport {
 		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("stunnel"), "stunnel_server.conf")); err == nil {
 			return transportSSL
 		}
+		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")); err == nil {
+			return transportShadowsocks
+		}
+		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("xdns"), "server.json")); err == nil {
+			return transportXDNS
+		}
+		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("mdns"), "server_config.toml")); err == nil {
+			return transportMDNS
+		}
 		return transportUnknown
 	}
 }
@@ -87,6 +108,8 @@ func freshSetupCleanup(serviceName string) error {
 			_ = hysteria.UninstallHysteriaService(serviceName)
 		} else if strings.Contains(serviceName, "WireGuard") || strings.HasPrefix(serviceName, "WireGuardTunnel$") || strings.HasPrefix(serviceName, "wg-quick@") {
 			_ = wireguard.UninstallWireGuardService(serviceName)
+		} else if strings.Contains(serviceName, "Shadowsocks") {
+			installer.UninstallService(serviceName)
 		} else {
 			_ = vless.UninstallXrayService(serviceName)
 		}
@@ -100,6 +123,8 @@ func freshSetupCleanup(serviceName string) error {
 		_ = exec.Command("taskkill", "/F", "/IM", "hysteria.exe").Run()
 		_ = exec.Command("taskkill", "/F", "/IM", "wstunnel.exe").Run()
 		_ = exec.Command("taskkill", "/F", "/IM", "stunnel.exe").Run()
+		_ = exec.Command("taskkill", "/F", "/IM", "ssserver.exe").Run()
+		_ = exec.Command("taskkill", "/F", "/IM", "masterdnsvpn-server.exe").Run()
 	} else {
 		// Global sysctl/iptables rollback must not run while another TunnelBypass OS service still
 		// exists (Last Standing Man). Only after removing a service do we check remaining units.
@@ -114,6 +139,8 @@ func freshSetupCleanup(serviceName string) error {
 		_ = exec.Command("pkill", "-9", "hysteria").Run()
 		_ = exec.Command("pkill", "-9", "wstunnel").Run()
 		_ = exec.Command("pkill", "-9", "stunnel").Run()
+		_ = exec.Command("pkill", "-9", "ssserver").Run()
+		_ = exec.Command("pkill", "-9", "masterdnsvpn-server").Run()
 	}
 
 	cleanupArtifactsForTransport(tr, serviceName)
@@ -139,6 +166,12 @@ func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
 		_ = os.RemoveAll(installer.GetConfigDir("ssh-tls"))
 	case transportGRPC:
 		_ = os.RemoveAll(installer.GetConfigDir("vless-grpc"))
+	case transportShadowsocks, transportShadowsocksWS:
+		_ = os.RemoveAll(installer.GetConfigDir("shadowsocks"))
+	case transportXDNS:
+		_ = os.RemoveAll(installer.GetConfigDir("xdns"))
+	case transportMDNS:
+		_ = os.RemoveAll(installer.GetConfigDir("mdns"))
 	case transportUDPGW:
 		// No config tree; logs cleaned below.
 	}

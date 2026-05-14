@@ -11,6 +11,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/transports/hysteria"
+	tbss "tunnelbypass/core/transports/shadowsocks"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
@@ -34,8 +35,42 @@ func displayTunnelSharingLinks(serviceName string) {
 		displaySSHTLSSharingLinks()
 		return
 	}
+	if strings.Contains(serviceName, "Shadowsocks") {
+		printConfiguredTunnelHostnames(serviceName)
+		displayShadowsocksSharingLinks()
+		return
+	}
 	if strings.Contains(serviceName, "SSH") || strings.Contains(serviceName, "SSL") {
 		fmt.Printf("\n    %sThis tunnel type has no URL sharing links — use the generated instructions.%s\n", ColorYellow, ColorReset)
+		return
+	}
+
+	if strings.Contains(serviceName, "XDNS") {
+		linkPath := filepath.Join(installer.GetConfigDir("xdns"), "sharing-link.txt")
+		data, err := os.ReadFile(linkPath)
+		if err != nil {
+			fmt.Printf("    %s✗ Cannot read sharing link: %v%s\n", ColorRed, err, ColorReset)
+			return
+		}
+		lines := strings.Split(string(utils.StripUTF8BOM(data)), "\n")
+		var link string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "vless://") {
+				link = line
+				break
+			}
+		}
+		if link == "" {
+			fmt.Printf("    %s✗ No vless:// link found in sharing-link.txt%s\n", ColorRed, ColorReset)
+			return
+		}
+		qrPath := filepath.Join(installer.GetConfigDir("xdns"), "qr-xdns.png")
+		_ = utils.SaveQRCodePNG(qrPath, link, 320)
+		fmt.Printf("\n  %sXDNS (VLESS + mKCP + DNS mask)%s\n", ColorBold+ColorMagenta, ColorReset)
+		fmt.Printf("  %sSharing link:%s\n  %s%s%s\n", ColorGreen, ColorReset, ColorBold, link, ColorReset)
+		fmt.Printf("\n  %sQR code saved:%s %s%s%s\n", ColorGray, ColorReset, ColorBold, qrPath, ColorReset)
+		fmt.Printf("  %sClient config:%s %s%s%s\n", ColorGray, ColorReset, ColorBold, filepath.Join(installer.GetConfigDir("xdns"), "client.json"), ColorReset)
 		return
 	}
 
@@ -406,6 +441,80 @@ func displayGRPCSharingLinks() {
 	}
 }
 
+func displayShadowsocksSharingLinks() {
+	configPath := filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")
+	root, err := tbss.ReadServerConfig(configPath)
+	if err != nil {
+		fmt.Printf("    %s✗ Cannot read %s: %v%s\n", ColorRed, configPath, err, ColorReset)
+		return
+	}
+
+	portf, _ := root["server_port"].(float64)
+	port := int(portf)
+	if port <= 0 {
+		port = 8388
+	}
+
+	method, _ := root["method"].(string)
+	password, _ := root["password"].(string)
+	plugin, _ := root["plugin"].(string)
+
+	var sharingList []string
+	var v2rayCertRaw string
+	var v2rayWSPath string
+	if meta, ok := root[host_catalog.MetaKey].(map[string]interface{}); ok {
+		sharingList = interfaceStringSlice(meta["sharingSNIs"])
+		if s, ok := meta[tbss.MetaV2rayClientCertRawKey].(string); ok {
+			v2rayCertRaw = strings.TrimSpace(s)
+		}
+		if s, ok := meta[tbss.MetaV2rayWSPathKey].(string); ok {
+			v2rayWSPath = strings.TrimSpace(s)
+		}
+	}
+	if po, _ := root["plugin_opts"].(string); plugin == "v2ray-plugin" && v2rayWSPath == "" {
+		v2rayWSPath = tbss.V2rayPluginPathFromServerOpts(po)
+	}
+
+	detectedIP := utils.GetPublicIP()
+
+	opt := types.ConfigOptions{
+		ServerAddr:            detectedIP,
+		Port:                  port,
+		SSMethod:              method,
+		SSPassword:            password,
+		SSPlugin:              plugin,
+		SSV2rayClientCertRaw:  v2rayCertRaw,
+		SSV2rayPluginWSPath:   v2rayWSPath,
+	}
+	if plugin == "v2ray-plugin" && opt.SSV2rayClientCertRaw == "" {
+		certPath := filepath.Join(installer.GetConfigDir("shadowsocks"), "cert.crt")
+		if raw, err := tbss.V2rayPluginCertRawFromPEMFile(certPath); err == nil {
+			opt.SSV2rayClientCertRaw = raw
+		}
+	}
+
+	if len(sharingList) == 0 {
+		sharingList = []string{detectedIP}
+	}
+
+	title := "Shadowsocks 2022"
+	if plugin == "v2ray-plugin" {
+		title = "Shadowsocks + v2ray-plugin (SNI)"
+	}
+	fmt.Printf("\n  %s%s%s  |  %sCipher:%s %s\n", ColorBold+ColorCyan, title, ColorReset, ColorGray, ColorReset, method)
+	for _, sni := range sharingList {
+		opt.Sni = sni
+		u, err := tbss.GenerateShadowsocksURLForSNI(opt, sni)
+		if err != nil {
+			fmt.Printf("\n  %sSNI/Host:%s %s\n", ColorGray, ColorReset, sni)
+			fmt.Printf("  %s[!] sharing link: %v%s\n", ColorYellow, err, ColorReset)
+			continue
+		}
+		fmt.Printf("\n  %sSNI/Host:%s %s\n", ColorGray, ColorReset, sni)
+		fmt.Printf("  %s%s%s\n", ColorBold, u, ColorReset)
+	}
+}
+
 func addNewSNI(reader *bufio.Reader) {
 	addNewSNIForService(reader, findInstalledService())
 }
@@ -426,7 +535,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		fmt.Printf("    %sSNI is tied to the TLS certificate. Re-run Setup (tunnel mode 6) to change hostname and regenerate certs.%s\n", ColorYellow, ColorReset)
 		return
 	}
-	if strings.Contains(sName, "WireGuard") || strings.Contains(sName, "SSH") || strings.Contains(sName, "SSL") {
+	if strings.Contains(sName, "WireGuard") || strings.Contains(sName, "SSH") || strings.Contains(sName, "SSL") || strings.Contains(sName, "XDNS") {
 		fmt.Printf("    %sNot applicable for this tunnel type.%s\n", ColorYellow, ColorReset)
 		return
 	}
@@ -458,6 +567,37 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		fmt.Println("    [*] Restarting tunnel service...")
 		_ = hysteria.InstallHysteriaService(sName, configPath, readListenPort(configPath, 443), types.ConfigOptions{})
 		printConfiguredTunnelHostnames(sName)
+		return
+	}
+
+	if strings.Contains(sName, "Shadowsocks") {
+		configPath := filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")
+		root, err := tbss.ReadServerConfig(configPath)
+		if err != nil {
+			fmt.Printf("    %s✗ Error reading config: %v%s\n", ColorRed, err, ColorReset)
+			return
+		}
+		var sharingList []string
+		metaObj, ok := root[host_catalog.MetaKey].(map[string]interface{})
+		if !ok {
+			metaObj = map[string]interface{}{"version": 1}
+			root[host_catalog.MetaKey] = metaObj
+		}
+		sharingList = interfaceStringSlice(metaObj["sharingSNIs"])
+		if hostListContainsFold(sharingList, newSni) {
+			fmt.Printf("    %s[!] That hostname is already in this tunnel's sharing links list.%s\n", ColorYellow, ColorReset)
+			printConfiguredTunnelHostnames(sName)
+			return
+		}
+		sharingList = append(sharingList, newSni)
+		sharingList = dedupeHostnamesOrdered(sharingList)
+		metaObj["sharingSNIs"] = stringSliceToJSONInterfaces(sharingList)
+
+		newData, _ := json.MarshalIndent(root, "", "  ")
+		_ = os.WriteFile(configPath, newData, 0644)
+		fmt.Printf("    %s✓ Added '%s' to sharing links.%s\n", ColorGreen, newSni, ColorReset)
+		printConfiguredTunnelHostnames(sName)
+		// No need to restart service for sharing link SNI changes for shadowsocks
 		return
 	}
 

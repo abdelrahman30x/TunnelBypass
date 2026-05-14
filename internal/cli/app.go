@@ -17,13 +17,13 @@ import (
 	"tunnelbypass/core/portable"
 	"tunnelbypass/core/portforward"
 	"tunnelbypass/core/udpgw"
+	"tunnelbypass/core/version"
 	"tunnelbypass/internal/debug"
 	"tunnelbypass/internal/elevate"
 	"tunnelbypass/internal/health"
 	"tunnelbypass/internal/runtimeenv"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/terminal"
-	"tunnelbypass/core/version"
 	"tunnelbypass/tools/host_catalog"
 )
 
@@ -50,8 +50,6 @@ var (
 	debugFlag       = flag.Bool("debug", false, "Verbose log output")
 	forwarderListen = flag.String("listen", "127.0.0.1:0", "Forwarder listen address (0 = dynamic allocation)")
 	forwarderTarget = flag.String("target", "127.0.0.1:0", "Forwarder target address")
-	selfHostGlobal  = flag.Bool("self-host", false, "LAN mode: wizard uses local IP; also forwarded to run/generate when placed before subcommand")
-	lanRelaxGlobal  = flag.Bool("lan-relax", false, "With --self-host: allow tunnel traffic to reach any LAN host (Xray private rule)")
 )
 
 // Main is the tunnelbypass CLI entry (called from cmd).
@@ -69,16 +67,11 @@ func Main() {
 		runtimeenv.WriteProbeSummary(os.Stderr, p)
 	}
 
-	if len(os.Args) > 1 {
-		scanEarlySelfHostFlags(os.Args[1:])
-	}
-
 	if i := subcommandIndex("run"); i >= 0 {
 		var ra []string
 		if i+1 < len(os.Args) {
 			ra = os.Args[i+1:]
 		}
-		ra = injectGlobalSelfHostPrepends(ra)
 		runCommand(ra)
 		return
 	}
@@ -87,7 +80,6 @@ func Main() {
 		if i+1 < len(os.Args) {
 			ga = os.Args[i+1:]
 		}
-		ga = injectGlobalSelfHostPrepends(ga)
 		generateCommand(ga)
 		return
 	}
@@ -145,21 +137,12 @@ func Main() {
 		return
 	}
 
-	wizardSelfHostEffective = earlySelfHostScan || *selfHostGlobal
-	wizardLanRelaxEffective = earlyLanRelaxScan || *lanRelaxGlobal
-
 	if len(os.Args) < 2 {
 		if os.Getenv("TUNNELBYPASS_AUTORUN_SETUP") == "1" && elevate.IsAdmin() {
 			_ = os.Unsetenv("TUNNELBYPASS_AUTORUN_SETUP")
 			runSetupDirect()
 			return
 		}
-		runWizard()
-		return
-	}
-
-	// e.g. tunnelbypass --self-host  or  tunnelbypass --self-host --debug
-	if flag.NArg() == 0 && wizardSelfHostEffective {
 		runWizard()
 		return
 	}
@@ -324,10 +307,6 @@ func printUsage() {
 	fmt.Println("\nEnvironment:")
 	fmt.Println("  TUNNELBYPASS_DATA_DIR      Override data directory (see installer)")
 	fmt.Println("  TUNNELBYPASS_ENV_PROBE=1   Print host probe (root, iptables/nft, container, sysctl.d writable) to stderr at startup")
-	fmt.Println("  TUNNELBYPASS_LAN_IP        Override auto-detected LAN IP when using run/generate --self-host")
-	fmt.Println("\nLAN self-host (top-level flags; also accepted on run/generate):")
-	fmt.Println("  --self-host                Open wizard in LAN mode, or pass through when placed before run/generate")
-	fmt.Println("  --lan-relax                With --self-host: allow tunnel to reach any LAN host [default: block private pivot]")
 	fmt.Println("\nUse flags (e.g. --debug, --portable, --data-dir) and config files under the data directory.")
 }
 

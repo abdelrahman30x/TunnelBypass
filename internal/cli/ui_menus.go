@@ -13,6 +13,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/transports/hysteria"
+	"tunnelbypass/core/transports/mdns"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
 	"tunnelbypass/core/types"
@@ -261,6 +262,8 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				_ = hysteria.UninstallHysteriaService(sName)
 			} else if strings.Contains(sName, "WireGuard") {
 				_ = wireguard.UninstallWireGuardService(sName)
+			} else if strings.Contains(sName, "Shadowsocks") {
+				installer.UninstallService(sName)
 			} else {
 				_ = vless.UninstallXrayService(sName)
 			}
@@ -275,6 +278,8 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				_ = hysteria.InstallHysteriaService(sName, filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), 443, types.ConfigOptions{})
 			} else if strings.Contains(sName, "WireGuard") {
 				_ = wireguard.InstallWireGuardService(sName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820, types.ConfigOptions{})
+			} else if strings.Contains(sName, "Shadowsocks") {
+				_ = installer.CreateService(sName, sName, filepath.Join(installer.GetSystemBinaryDir("shadowsocks"), "ssserver"), []string{"-c", filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")}, installer.GetBaseDir())
 			} else {
 				cfgPath, port := xrayServiceConfigPathAndPort(sName)
 				_ = vless.InstallXrayService(sName, cfgPath, port, types.ConfigOptions{})
@@ -290,6 +295,8 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				err = hysteria.UninstallHysteriaService(sName)
 			} else if strings.Contains(sName, "WireGuard") {
 				err = wireguard.UninstallWireGuardService(sName)
+			} else if strings.Contains(sName, "Shadowsocks") {
+				installer.UninstallService(sName)
 			} else {
 				err = vless.UninstallXrayService(sName)
 			}
@@ -382,9 +389,13 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
 
 		switch tr {
-		case transportXray, transportHysteria, transportSSHTLS, transportGRPC:
+		case transportXray, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
 			fmt.Printf("  %s[4]%s  %sAdd tunnel hostname (SNI)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 			fmt.Printf("  %s[5]%s  %sShow sharing links%s\n", ColorBold+ColorWhite, ColorReset, ColorMagenta, ColorReset)
+		case transportXDNS:
+			fmt.Printf("  %s[5]%s  %sShow sharing links%s\n", ColorBold+ColorWhite, ColorReset, ColorMagenta, ColorReset)
+		case transportMDNS:
+			// no extra menu items for MDNS
 		case transportWireGuard:
 			fmt.Printf("  %s[4]%s  %sShow client config / QR%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		case transportSSH, transportSSL, transportWSS:
@@ -414,6 +425,14 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				_ = wireguard.UninstallWireGuardService(serviceName)
 				time.Sleep(1 * time.Second)
 				_ = wireguard.InstallWireGuardService(serviceName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820, types.ConfigOptions{})
+			} else if tr == transportShadowsocks || tr == transportShadowsocksWS {
+				installer.UninstallService(serviceName)
+				time.Sleep(1 * time.Second)
+				_ = installer.CreateService(serviceName, serviceName, filepath.Join(installer.GetSystemBinaryDir("shadowsocks"), "ssserver"), []string{"-c", filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")}, installer.GetBaseDir())
+			} else if tr == transportMDNS {
+				installer.UninstallService(serviceName)
+				time.Sleep(1 * time.Second)
+				_ = mdns.InstallMDNSService(serviceName, filepath.Join(installer.GetConfigDir("mdns"), "server_config.toml"), 53, types.ConfigOptions{})
 			} else {
 				_ = vless.UninstallXrayService(serviceName)
 				time.Sleep(1 * time.Second)
@@ -428,6 +447,10 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				_ = hysteria.UninstallHysteriaService(serviceName)
 			} else if tr == transportWireGuard {
 				_ = wireguard.UninstallWireGuardService(serviceName)
+			} else if tr == transportShadowsocks || tr == transportShadowsocksWS {
+				installer.UninstallService(serviceName)
+			} else if tr == transportMDNS {
+				installer.UninstallService(serviceName)
 			} else {
 				_ = vless.UninstallXrayService(serviceName)
 			}
@@ -435,8 +458,12 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "4":
 			switch tr {
-			case transportXray, transportHysteria, transportSSHTLS, transportGRPC:
+			case transportXray, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
 				addNewSNIForService(reader, serviceName)
+			case transportXDNS:
+				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
+			case transportMDNS:
+				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
 			case transportWireGuard:
 				displayWireGuardClientInfo()
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
@@ -448,7 +475,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			}
 		case "5":
-			if tr == transportXray || tr == transportHysteria || tr == transportSSHTLS || tr == transportGRPC {
+			if tr == transportXray || tr == transportHysteria || tr == transportSSHTLS || tr == transportGRPC || tr == transportShadowsocks || tr == transportShadowsocksWS || tr == transportXDNS {
 				displayTunnelSharingLinks(serviceName)
 			} else {
 				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
@@ -460,6 +487,10 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				_ = hysteria.UninstallHysteriaService(serviceName)
 			} else if tr == transportWireGuard {
 				_ = wireguard.UninstallWireGuardService(serviceName)
+			} else if tr == transportShadowsocks || tr == transportShadowsocksWS {
+				installer.UninstallService(serviceName)
+			} else if tr == transportMDNS {
+				installer.UninstallService(serviceName)
 			} else {
 				_ = vless.UninstallXrayService(serviceName)
 			}
@@ -527,6 +558,10 @@ func showServiceStatus(name string) {
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_grpc_error.log"))
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_grpc_access.log"))
 	}
+	if strings.Contains(name, "Shadowsocks") {
+		// shadowsocks-rust doesn't log to file automatically; the service wrapper captures stdout
+		// which goes to name+".out.log" or TunnelBypass-Service.log.
+	}
 	
 	for _, logPath := range logCandidates {
 		if _, err := os.Stat(logPath); err != nil {
@@ -550,6 +585,8 @@ func xrayServiceConfigPathAndPort(serviceName string) (string, int) {
 		cfgPath = filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
 	case strings.Contains(serviceName, "GRPC"):
 		cfgPath = filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
+	case strings.Contains(serviceName, "XDNS"):
+		cfgPath = filepath.Join(installer.GetConfigDir("xdns"), "server.json")
 	}
 	return cfgPath, readInboundPortFromServerJSON(cfgPath, 443)
 }

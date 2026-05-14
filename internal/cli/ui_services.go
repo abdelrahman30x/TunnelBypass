@@ -39,6 +39,10 @@ func findInstalledServices() []string {
 		"TunnelBypass-SSL",
 		"TunnelBypass-WSS",
 		"TunnelBypass-Tunnel",
+		"TunnelBypass-Shadowsocks",
+		"TunnelBypass-Shadowsocks-WS",
+		"TunnelBypass-XDNS",
+		"TunnelBypass-MasterDnsVPN",
 		"WireGuardTunnel$wg_server", // Windows
 		"wg-quick@wg_server",        // Linux
 	}

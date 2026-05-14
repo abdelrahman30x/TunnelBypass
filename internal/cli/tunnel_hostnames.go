@@ -24,6 +24,8 @@ func xrayConfigPathForSNI(serviceName string) string {
 		return filepath.Join(installer.GetConfigDir("vless-ws"), "server.json")
 	case strings.Contains(serviceName, "GRPC"):
 		return filepath.Join(installer.GetConfigDir("vless-grpc"), "server.json")
+	case strings.Contains(serviceName, "XDNS"):
+		return filepath.Join(installer.GetConfigDir("xdns"), "server.json")
 	default:
 		return filepath.Join(installer.GetConfigDir("vless"), "server.json")
 	}
