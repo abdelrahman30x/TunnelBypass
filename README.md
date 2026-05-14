@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/0a6cd2fa-10ae-43fd-9be1-46be294465bd" alt="TunnelBypass Banner" width="100%">
+  <img src="https://github.com/user-attachments/assets/0a6cd2fa-10ae-43fd-9be1-46be294465bd" alt="Tunnel Bypass" width="100%">
 </p>
 
-<h1>TunnelBypass</h1>
+<h1>Tunnel Bypass</h1>
 
 <p align="center">
   <a href="https://github.com/abdelrahman30x/TunnelBypass/releases">
@@ -56,9 +56,11 @@
 
 - `hysteria` — Hysteria 2 over QUIC
 - `wireguard` — kernel-style VPN tunnel
+- `xdns` — VLESS + mKCP over UDP/53 (DNS mask for extreme censorship)
 
 <p><strong>Other</strong></p>
 
+- `shadowsocks` — Shadowsocks 2022 (AEAD) via shadowsocks-rust
 - `wss` — WebSocket + TLS via wstunnel
 - `tls` — TLS wrapper (stunnel-style)
 
@@ -131,20 +133,6 @@ tunnelbypass uninstall   # remove configs, services, and binary
 <h2>Examples</h2>
 
 <p>See <a href="EXAMPLES.md">EXAMPLES.md</a> for copy-paste commands and spec files.</p>
-
----
-
-<h2>LAN Self-Host</h2>
-
-<p>When client and server are on the same network, use <code>--self-host</code> to resolve a local RFC1918 address instead of a public IP.</p>
-
-```bash
-tunnelbypass --self-host              # interactive
-tunnelbypass --self-host run reality --port 8443
-```
-
-- `--lan-relax` removes the default `geoip:private` block. Only use on isolated home/lab networks.
-- Override auto-detection with `TUNNELBYPASS_LAN_IP=192.168.1.10` or `--server <ip>`.
 
 ---
 

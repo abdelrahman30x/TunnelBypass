@@ -54,6 +54,18 @@ tunnelbypass run hysteria --port 8443 --sni hy.example.com --uuid auto
 
 ---
 
+## XDNS (VLESS + mKCP + DNS mask)
+
+For extreme censorship where only DNS (UDP/53) is allowed:
+
+```bash
+tunnelbypass run xdns --port 53 --uuid auto
+```
+
+Client import: use the generated `vless://` link or `configs/xdns/client.json` in v2rayN / Nekoray / Matsuri.
+
+---
+
 ## SSH
 
 ```bash
@@ -96,30 +108,7 @@ tunnelbypass run tls --port 443 --sni tls.example.com
 ```bash
 tunnelbypass generate reality --port 443 --sni example.com --uuid auto
 tunnelbypass generate hysteria --port 8443 --sni example.com --uuid auto
-```
-
----
-
-## LAN self-host
-
-Interactive:
-```bash
-tunnelbypass --self-host
-```
-
-One-shot:
-```bash
-tunnelbypass --self-host run reality --port 8443 --sni lan.local
-```
-
-Override IP:
-```bash
-TUNNELBYPASS_LAN_IP=192.168.1.10 tunnelbypass --self-host run reality --port 8443
-```
-
-Relaxed LAN (home lab only):
-```bash
-tunnelbypass --self-host --lan-relax run reality --port 8443
+tunnelbypass generate xdns --port 53 --uuid auto
 ```
 
 ---

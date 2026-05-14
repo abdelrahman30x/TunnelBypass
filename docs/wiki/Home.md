@@ -41,7 +41,6 @@ TunnelBypass يساعدك تجهّز **نفقًا آمناً** على سيرفر
 - **Ready-made configs** under a predictable tree (`configs/<transport>/`, logs nearby).
 - **Optional OS services** so listeners survive reboots when you choose that path.
 - **Clear data layout** via `--data-dir`, `run portable`, or `TUNNELBYPASS_DATA_DIR` (see [Installation](Installation.md)).
-- **LAN self-host** for same-subnet setups: top-level **`tunnelbypass --self-host`** for the wizard, or **`run`** / **`generate`** with `--self-host`—see [Operations](Operations.md#lan-self-host).
 - On **Linux**, optional **transit** tuning (sysctl, iptables, autopilot)—see [Linux networking](Linux-networking.md).
 
 ## Who it’s for
@@ -60,6 +59,6 @@ TunnelBypass يساعدك تجهّز **نفقًا آمناً** على سيرفر
 1. [Installation](Installation.md) — binaries, where files live.
 2. [Transports](Transports.md) — choose a protocol and understand trade-offs.
 3. [Linux networking](Linux-networking.md) — only if the server is Linux and you use transit features.
-4. [Operations](Operations.md) — `status`, `uninstall`, portable runs, LAN self-host, health checks.
+4. [Operations](Operations.md) — `status`, `uninstall`, portable runs, health checks.
 
 The [root README](../../README.md) stays the short entry point; these pages go deeper (use `tunnelbypass run -help` for every flag).
