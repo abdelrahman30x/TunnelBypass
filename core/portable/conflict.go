@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"tunnelbypass/core/svcman"
+	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 )
 
@@ -163,6 +164,10 @@ func OSServiceNameForTransport(t string) string {
 		return "TunnelBypass-WSS"
 	case "tls":
 		return "TunnelBypass-SSL"
+	case "xdns":
+		return "TunnelBypass-XDNS"
+	case "mdns":
+		return "TunnelBypass-MasterDnsVPN"
 	default:
 		return ""
 	}
@@ -198,6 +203,13 @@ func inferOSServiceName(requestedTransport, processName, runningTransport string
 		if requestedTransport != "" {
 			return OSServiceNameForTransport(requestedTransport)
 		}
+	case strings.Contains(pl, "xray"):
+		rt := strings.ToLower(requestedTransport)
+		if rt == "xdns" || strings.Contains(rt, "vless-dns") || strings.Contains(rt, "dns-tunnel") {
+			return "TunnelBypass-XDNS"
+		}
+	case strings.Contains(pl, "masterdnsvpn"):
+		return "TunnelBypass-MasterDnsVPN"
 	}
 	return ""
 }
@@ -293,7 +305,7 @@ func buildSuggestions(c PortConflict, commandHint string, dataDir string) []stri
 	var out []string
 	port2 := c.Port + 1
 	if port2 < 1024 {
-		port2 = 8443
+		port2 = types.DefaultHysteriaListenPort
 	}
 	if commandHint == "" {
 		commandHint = utils.AppName() + " run --type " + c.Transport

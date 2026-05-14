@@ -12,6 +12,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	tbssh "tunnelbypass/core/ssh"
+	"tunnelbypass/core/types"
 	"tunnelbypass/core/udpgw"
 )
 
@@ -21,7 +22,7 @@ func RunSSHStack(ctx context.Context, log *slog.Logger, sshPort, udpgwPort int, 
 		log = slog.Default()
 	}
 	if udpgwPort <= 0 {
-		udpgwPort = 7300
+		udpgwPort = types.DefaultUDPGWPort
 	}
 	pref := sshPort
 	if pref <= 0 {
@@ -106,7 +107,7 @@ func RunEmbeddedSSH(ctx context.Context, log *slog.Logger, sshPort, udpgwPort in
 		log = slog.Default()
 	}
 	if udpgwPort <= 0 {
-		udpgwPort = 7300
+		udpgwPort = types.DefaultUDPGWPort
 	}
 	pref := sshPort
 	if pref <= 0 {
@@ -254,7 +255,7 @@ func waitUDPGWListenShort(ctx context.Context, udpgwPort int, log *slog.Logger) 
 func runEmbedSSHListener(ctx context.Context, sshLog *slog.Logger, sshPort, udpgwPort int, u, pw, keyPath string) error {
 	// Bind to localhost only for security (internal port should not be accessible externally)
 	listenAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
-	
+
 	sshLog.Info("embedded ssh: listening", "addr", listenAddr, "user", u,
 		"udpgw_tcp", fmt.Sprintf("127.0.0.1:%d", udpgwPort),
 		"pid", os.Getpid(),

@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/types"
 	"tunnelbypass/core/udpgw"
 )
 
@@ -25,6 +26,9 @@ func init() {
 	Register("wireguard", func() Transport { return wireguardTransport{} })
 	Register("wss", func() Transport { return wssTransport{} })
 	Register("tls", func() Transport { return tlsTransport{} })
+	Register("shadowsocks", func() Transport { return shadowsocksTransport{} })
+	Register("xdns", func() Transport { return xdnsTransport{} })
+	Register("mdns", func() Transport { return mdnsTransport{} })
 }
 
 type sshTransport struct{}
@@ -50,7 +54,7 @@ func (udpgwTransport) Run(ctx context.Context, log *slog.Logger, o Options) erro
 	log.Warn("udpgw: standalone mode is deprecated; use `run portable ssh` (or `run --portable ssh`) for SSH+UDPGW")
 	p := o.UDPGWPort
 	if p <= 0 {
-		p = 7300
+		p = types.DefaultUDPGWPort
 	}
 	return udpgw.Run(ctx, udpgw.Options{Port: p, Logger: log.With("component", "udpgw")})
 }
@@ -210,7 +214,7 @@ func (wssTransport) Run(ctx context.Context, log *slog.Logger, o Options) error 
 	sshBack := fmt.Sprintf("127.0.0.1:%d", back)
 	wssPort := o.WssPort
 	if wssPort <= 0 {
-		wssPort = 443
+		wssPort = types.DefaultTLSTunnelListenPort
 	}
 	cfgDir := installer.GetConfigDir("wstunnel")
 	certPath := filepath.Join(cfgDir, "wss-cert.pem")
@@ -257,4 +261,61 @@ func (tlsTransport) Run(ctx context.Context, log *slog.Logger, o Options) error 
 	}
 	_ = WriteRunMeta(installer.GetBaseDir(), "tls", RunMeta{Extra: map[string]any{"config": conf, "ssh_backend_port": back}})
 	return runForeground(ctx, log, "stunnel", stunnelPath, []string{conf})
+}
+
+type shadowsocksTransport struct{}
+
+func (shadowsocksTransport) Name() string { return "shadowsocks" }
+
+func (shadowsocksTransport) Dependencies() []string { return nil }
+
+func (shadowsocksTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("shadowsocks", "server.json", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("shadowsocks: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("shadowsocks")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "shadowsocks", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "ssserver", exe, []string{"-c", cfg})
+}
+
+type xdnsTransport struct{}
+
+func (xdnsTransport) Name() string { return "xdns" }
+
+func (xdnsTransport) Dependencies() []string { return nil }
+
+func (xdnsTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("xdns", "server.json", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("xdns: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("xray")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "xdns", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "xray", exe, []string{"run", "-config", cfg})
+}
+
+type mdnsTransport struct{}
+
+func (mdnsTransport) Name() string { return "mdns" }
+
+func (mdnsTransport) Dependencies() []string { return nil }
+
+func (mdnsTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfg := defaultConfigPath("mdns", "server_config.toml", o.ConfigPath)
+	if _, err := os.Stat(cfg); err != nil {
+		return fmt.Errorf("mdns: config not found at %s", cfg)
+	}
+	exe, err := installer.EnsureBinary("masterdnsvpn-server")
+	if err != nil {
+		return err
+	}
+	_ = WriteRunMeta(installer.GetBaseDir(), "mdns", RunMeta{Extra: map[string]any{"config": cfg}})
+	return runForeground(ctx, log, "masterdnsvpn-server", exe, []string{"-config", cfg})
 }

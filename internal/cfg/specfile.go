@@ -163,31 +163,47 @@ func ApplySpecDefaults(t string, f *SpecFile) {
 	switch t {
 	case "reality", "vless":
 		if f.Port == 0 {
-			f.Port = 443
+			f.Port = types.DefaultTLSTunnelListenPort
 		}
 	case "hysteria":
 		if f.Port == 0 {
-			f.Port = 8443
+			f.Port = types.DefaultHysteriaListenPort
 		}
 	case "wireguard":
 		if f.Port == 0 {
-			f.Port = 51820
+			f.Port = types.DefaultWireGuardListenPort
 		}
 	case "ssh":
 		if f.Port == 0 {
-			f.Port = 22
+			f.Port = types.DefaultSSHSpecListenPort
 		}
 	case "wss", "tls":
 		if f.Port == 0 {
-			f.Port = 443
+			f.Port = types.DefaultTLSTunnelListenPort
 		}
 	case "ssh-tls":
 		if f.Port == 0 {
-			f.Port = 2053
+			f.Port = types.DefaultSSHTLSDirectListenPort
+		}
+	case "shadowsocks", "ss":
+		if f.Port == 0 {
+			f.Port = types.DefaultShadowsocksListenPort
+		}
+	case "shadowsocks-ws", "ss-ws":
+		if f.Port == 0 {
+			f.Port = types.DefaultShadowsocksV2rayListenPort
+		}
+	case "xdns":
+		if f.Port == 0 {
+			f.Port = types.DefaultXDNSListenPort
+		}
+	case "mdns":
+		if f.Port == 0 {
+			f.Port = types.DefaultMDNSListenPort
 		}
 	}
 	if f.UDPGWPort == 0 {
-		f.UDPGWPort = 7300
+		f.UDPGWPort = types.DefaultUDPGWPort
 	}
 }
 
