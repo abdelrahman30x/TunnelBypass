@@ -14,7 +14,6 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/types"
-	"tunnelbypass/internal/network"
 	"tunnelbypass/internal/utils"
 
 	"golang.org/x/crypto/curve25519"
@@ -54,13 +53,7 @@ AllowedIPs = 10.0.0.2/32
 		endpoint = opt.Sni
 	}
 
-	lanLine := ""
-	if opt.NetworkProfile.Mode == network.LANMode {
-		lanLine = fmt.Sprintf("# [SELF-HOST] Endpoint LAN IP: %s (source: %s)\n",
-			opt.NetworkProfile.PrimaryIP, opt.NetworkProfile.ResolutionSource)
-	}
-
-	clientConfig := fmt.Sprintf(`%s# TunnelBypass (%s)
+	clientConfig := fmt.Sprintf(`# TunnelBypass (%s)
 [Interface]
 PrivateKey = %s
 Address = 10.0.0.2/24
@@ -71,7 +64,7 @@ PublicKey = %s
 Endpoint = %s:%d
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 21
-`, lanLine, hostLabel, cPriv, sPub, endpoint, opt.Port)
+`, hostLabel, cPriv, sPub, endpoint, opt.Port)
 
 	configsDir := installer.GetConfigDir("wireguard")
 	_ = os.MkdirAll(configsDir, 0755)

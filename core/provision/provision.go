@@ -11,9 +11,12 @@ import (
 	"tunnelbypass/core/installer"
 	tbtransport "tunnelbypass/core/transport"
 	"tunnelbypass/core/transports/hysteria"
+	"tunnelbypass/core/transports/mdns"
+	tbss "tunnelbypass/core/transports/shadowsocks"
 	tbssh "tunnelbypass/core/transports/ssh"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
+	"tunnelbypass/core/transports/xdns"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/utils"
 	"tunnelbypass/tools/host_catalog"
@@ -84,7 +87,7 @@ func provisionReality(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	ensureHost(&opt)
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-VLESS")
 
@@ -144,7 +147,7 @@ func provisionSSH_TLS(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	ensureHost(&opt)
 	if opt.Port == 0 {
-		opt.Port = 2053
+		opt.Port = types.DefaultSSHTLSDirectListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-SSH-TLS")
 
@@ -213,7 +216,7 @@ func provisionVlessGRPC(log *slog.Logger, opt types.ConfigOptions, serverOut, cl
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	ensureHost(&opt)
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-VLESS-GRPC")
 
@@ -273,7 +276,7 @@ func provisionVlessWS(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	ensureHost(&opt)
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-VLESS-WS")
 
@@ -317,7 +320,7 @@ func provisionHysteria(log *slog.Logger, opt types.ConfigOptions, serverOut, cli
 	opt.Transport = types.TransportHysteria
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	if opt.Port == 0 {
-		opt.Port = 8443
+		opt.Port = types.DefaultHysteriaListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "udp", "TunnelBypass-Hysteria")
 
@@ -360,7 +363,7 @@ func provisionWireguard(log *slog.Logger, opt types.ConfigOptions, serverOut, cl
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	ensureHost(&opt)
 	if opt.Port == 0 {
-		opt.Port = 51820
+		opt.Port = types.DefaultWireGuardListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "udp", "TunnelBypass-WireGuard")
 
@@ -440,7 +443,7 @@ func provisionTLS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	var r Result
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-SSL")
 
@@ -482,7 +485,7 @@ func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 
 	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-WSS")
 
@@ -563,6 +566,210 @@ func ensurePortableStunnelArtifacts(log *slog.Logger, opt types.ConfigOptions) e
 	return nil
 }
 
+func provisionXDNS(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = types.TransportXDNS
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	ensureHost(&opt)
+	if opt.Port == 0 {
+		opt.Port = types.DefaultXDNSListenPort
+	}
+	ApplyPortAllocation(log, &opt.Port, "udp", "TunnelBypass-XDNS")
+
+	opt.UUID = NormalizeUUID(opt.UUID)
+	if strings.TrimSpace(opt.KCPSeed) == "" {
+		opt.KCPSeed = utils.GenerateRandomString(32)
+	}
+	if opt.KCPMTU == 0 {
+		opt.KCPMTU = 1350
+	}
+	if opt.KCPTTI == 0 {
+		opt.KCPTTI = 20
+	}
+	if strings.TrimSpace(opt.KCPHeaderType) == "" {
+		opt.KCPHeaderType = "none"
+	}
+
+	srv, err := xdns.GenerateServerConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("xdns server config: %w", err)
+	}
+	cli, err := xdns.GenerateClientConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("xdns client config: %w", err)
+	}
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.SharingLink = xdns.GenerateVlessURL(opt, opt.KCPSeed)
+
+	configsDir := installer.GetConfigDir("xdns")
+	_ = os.MkdirAll(configsDir, 0755)
+	_ = os.WriteFile(filepath.Join(configsDir, "sharing-link.txt"),
+		[]byte("# Tunnel — XDNS (VLESS + mKCP + DNS)\n"+r.SharingLink+"\n"), 0644)
+
+	qrPath := filepath.Join(configsDir, "qr-xdns.png")
+	if err := utils.SaveQRCodePNG(qrPath, r.SharingLink, 320); err != nil && log != nil {
+		log.Warn("provision: qr png", "err", err)
+	}
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+	r.ListenPort = opt.Port
+	return r, nil
+}
+
+func provisionMDNS(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = types.TransportMDNS
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	ensureHost(&opt)
+	if opt.Port == 0 {
+		opt.Port = types.DefaultMDNSListenPort
+	}
+	ApplyPortAllocation(log, &opt.Port, "udp", "TunnelBypass-MasterDnsVPN")
+
+	// Validate domain
+	if strings.TrimSpace(opt.MDNSDomain) == "" {
+		opt.MDNSDomain = opt.Host
+	}
+	if strings.TrimSpace(opt.MDNSDomain) == "" {
+		opt.MDNSDomain = opt.Sni
+	}
+	if strings.TrimSpace(opt.MDNSDomain) == "" {
+		return r, fmt.Errorf("mdns: tunnel domain is required (set --mdns-domain, --sni, or --host)")
+	}
+
+	// Generate or use provided encryption key
+	if strings.TrimSpace(opt.MDNSEncryptionKey) == "" {
+		opt.MDNSEncryptionKey = mdns.GenerateEncryptionKey()
+	}
+	if opt.MDNSEncryptionMethod < 0 || opt.MDNSEncryptionMethod > 5 {
+		opt.MDNSEncryptionMethod = 3 // AES-128-GCM
+	}
+
+	resolvers := opt.MDNSResolvers
+	if len(resolvers) == 0 {
+		resolvers = mdns.DefaultResolvers
+	}
+
+	srv, err := mdns.GenerateServerConfig(opt, opt.MDNSEncryptionKey)
+	if err != nil {
+		return r, fmt.Errorf("mdns server config: %w", err)
+	}
+	cli, resolversPath, err := mdns.GenerateClientConfig(opt, opt.MDNSEncryptionKey, resolvers)
+	if err != nil {
+		return r, fmt.Errorf("mdns client config: %w", err)
+	}
+
+	_ = mdns.GenerateSharingPackage(opt, opt.MDNSEncryptionKey, cli, resolversPath)
+
+	configsDir := installer.GetConfigDir("mdns")
+	_ = os.MkdirAll(configsDir, 0755)
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.ListenPort = opt.Port
+
+	// Print NS delegation guide
+	mdns.PrintNSDelegationGuide(opt.ServerAddr, opt.MDNSDomain)
+
+	return r, nil
+}
+
+func provisionShadowsocks(log *slog.Logger, opt types.ConfigOptions, serverOut, clientOut string) (Result, error) {
+	var r Result
+	opt.Transport = "shadowsocks"
+	if opt.SSPlugin == "v2ray-plugin" {
+		opt.Transport = "shadowsocks-ws"
+	}
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	if opt.Port == 0 {
+		if opt.SSPlugin == "v2ray-plugin" {
+			opt.Port = types.DefaultShadowsocksV2rayListenPort
+		} else {
+			opt.Port = types.DefaultShadowsocksListenPort
+		}
+	}
+	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-Shadowsocks")
+
+	opt.UUID = NormalizeUUID(opt.UUID)
+
+	if opt.SSPlugin == "v2ray-plugin" {
+		if _, err := installer.EnsureBinary("v2ray-plugin"); err != nil {
+			return r, fmt.Errorf("failed to download v2ray-plugin: %w", err)
+		}
+		configsDir := installer.GetConfigDir("shadowsocks")
+		_ = os.MkdirAll(configsDir, 0755)
+		certPath := filepath.Join(configsDir, "cert.crt")
+		keyPath := filepath.Join(configsDir, "private.key")
+		sniList := host_catalog.SharingLinkSNIs(opt.Sni, opt.ExtraSNIs)
+		commonName := "localhost"
+		if len(sniList) > 0 && sniList[0] != "" {
+			commonName = sniList[0]
+		}
+		if err := installer.EnsureSelfSignedCertWithSAN(certPath, keyPath, commonName, sniList); err != nil {
+			return r, fmt.Errorf("shadowsocks v2ray-plugin cert: %w", err)
+		}
+		raw, err := tbss.V2rayPluginCertRawFromPEMFile(certPath)
+		if err != nil {
+			return r, fmt.Errorf("shadowsocks v2ray-plugin client cert raw: %w", err)
+		}
+		opt.SSV2rayClientCertRaw = raw
+		if strings.TrimSpace(opt.SSV2rayPluginWSPath) == "" {
+			opt.SSV2rayPluginWSPath = tbss.RandomV2rayPluginWSPath()
+		}
+		wsPath := tbss.NormalizeV2rayWSPath(opt.SSV2rayPluginWSPath)
+		// v2ray-plugin parses plugin_opts with escape rules; '\' mangles Windows paths (C:TunnelBypass...).
+		// Forward slashes are accepted on Windows; see also shadowsocks.normalizeV2rayPluginCertKeyPaths.
+		opt.SSPluginOpts = fmt.Sprintf("server;tls;host=%s;path=%s;cert=%s;key=%s", commonName, wsPath, filepath.ToSlash(certPath), filepath.ToSlash(keyPath))
+	}
+
+	srv, cli, err := tbss.GenerateShadowsocksConfig(opt)
+	if err != nil {
+		return r, fmt.Errorf("shadowsocks config: %w", err)
+	}
+	r.ServerConfigPath = srv
+	r.ClientConfigPath = cli
+	r.SharingLink, err = tbss.GenerateShadowsocksURL(opt)
+	if err != nil {
+		return r, fmt.Errorf("shadowsocks sharing link: %w", err)
+	}
+
+	configsDir := installer.GetConfigDir("shadowsocks")
+	_ = os.MkdirAll(configsDir, 0755)
+	all, err := tbss.GenerateAllSNIUrls(opt)
+	if err != nil {
+		return r, fmt.Errorf("shadowsocks all sharing links: %w", err)
+	}
+	_ = os.WriteFile(filepath.Join(configsDir, "sharing-links-all.txt"),
+		[]byte("# Tunnel — sharing links (all hostnames)\n"+strings.Join(all, "\n\n")), 0644)
+
+	qrPath := filepath.Join(configsDir, "qr-shadowsocks.png")
+	if err := utils.SaveQRCodePNG(qrPath, r.SharingLink, 320); err != nil && log != nil {
+		log.Warn("provision: qr png", "err", err)
+	}
+
+	if err := CopyFileIfDifferent(log, srv, serverOut); err != nil {
+		return r, err
+	}
+	if err := CopyFileIfDifferent(log, cli, clientOut); err != nil {
+		return r, err
+	}
+	r.ListenPort = opt.Port
+	return r, nil
+}
+
 func NeedsProvision(transport string) bool {
 	t := strings.ToLower(strings.TrimSpace(transport))
 	switch t {
@@ -602,6 +809,18 @@ func NeedsProvision(transport string) bool {
 		return err != nil
 	case "ssh":
 		p := filepath.Join(installer.GetConfigDir("ssh"), "ssh_tunnel_instructions.txt")
+		_, err := os.Stat(p)
+		return err != nil
+	case "shadowsocks", "ss", "shadowsocks-ws":
+		p := filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")
+		_, err := os.Stat(p)
+		return err != nil
+	case "xdns":
+		p := filepath.Join(installer.GetConfigDir("xdns"), "server.json")
+		_, err := os.Stat(p)
+		return err != nil
+	case "mdns":
+		p := filepath.Join(installer.GetConfigDir("mdns"), "server_config.toml")
 		_, err := os.Stat(p)
 		return err != nil
 	default:

@@ -18,6 +18,20 @@ type ConfigOptions struct {
 	ObfsPassword string   `json:"obfs_password"`
 	WSPath       string   `json:"ws_path"`
 
+	// Shadowsocks-specific options.
+	SSMethod string `json:"ss_method"` // Shadowsocks cipher (default: 2022-blake3-aes-256-gcm per SS2022 / Xray docs).
+	// For SS2022 methods: PSK length must match the cipher (e.g. 32-byte key as standard base64 for 2022-blake3-aes-256-gcm).
+	// TunnelBypass auto-generates that when empty. For Xray multi-user inbound, client password is "ServerPSK:UserPSK" (not used in single-password ss-server JSON).
+	SSPassword   string `json:"ss_password"`
+	SSPlugin     string `json:"ss_plugin"`      // Plugin name (e.g. "v2ray-plugin")
+	SSPluginOpts string `json:"ss_plugin_opts"` // Plugin options
+
+	// SSV2rayClientCertRaw is base64(DER) for v2ray-plugin client certRaw= (embedded in ss:// / client.json; no client-side cert file).
+	// Set at provision from the server TLS cert; also stored in server.json _tunnelbypass.v2rayClientCertRaw for sharing regeneration.
+	SSV2rayClientCertRaw string `json:"-"`
+	// SSV2rayPluginWSPath is v2ray-plugin WebSocket path=… (random per provision); stored in server.json meta for sharing links.
+	SSV2rayPluginWSPath string `json:"-"`
+
 	SSHUser           string `json:"ssh_user"`
 	SSHPassword       string `json:"ssh_password"`
 	SSHWelcomeMessage string `json:"ssh_welcome_message"`
@@ -29,6 +43,19 @@ type ConfigOptions struct {
 	LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`
 	LinuxRouter         bool `json:"linux_router,omitempty"`
 	LinuxNoAutoOptimize bool `json:"linux_no_auto_optimize,omitempty"`
+
+	// XDNS / mKCP tuning options.
+	KCPSeed       string `json:"kcp_seed"`
+	KCPMTU        int    `json:"kcp_mtu"`         // default: 1350
+	KCPTTI        int    `json:"kcp_tti"`         // default: 20
+	KCPHeaderType string `json:"kcp_header_type"` // default: "none"
+
+	// MasterDnsVPN options.
+	MDNSDomain           string   `json:"mdns_domain"`
+	MDNSEncryptionKey    string   `json:"mdns_encryption_key"`
+	MDNSEncryptionMethod int      `json:"mdns_encryption_method"` // 0-5, default 3 (AES-128-GCM)
+	MDNSLocalDNS         bool     `json:"mdns_local_dns"`
+	MDNSResolvers        []string `json:"mdns_resolvers"`
 
 	// NetworkProfile is resolved once in engine.Run (read-only for generators).
 	NetworkProfile network.NetworkProfile `json:"-"`
@@ -58,9 +85,13 @@ type XrayServerConfig struct {
 }
 
 const (
-	TransportReality  = "reality"
-	TransportGRPC     = "grpc"
-	TransportVLESS    = "vless-tcp"
-	TransportUDP      = "udp"
-	TransportHysteria = "hysteria"
+	TransportReality       = "reality"
+	TransportGRPC          = "grpc"
+	TransportVLESS         = "vless-tcp"
+	TransportUDP           = "udp"
+	TransportHysteria      = "hysteria"
+	TransportShadowsocks   = "shadowsocks"
+	TransportShadowsocksWS = "shadowsocks-ws"
+	TransportXDNS          = "xdns"
+	TransportMDNS          = "mdns"
 )

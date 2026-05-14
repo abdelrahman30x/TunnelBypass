@@ -41,4 +41,17 @@ func init() {
 		// Standalone UDPGW has no config files; engine still runs portable.RunNamed("udpgw", ...).
 		return transport.Result{}, nil
 	})
+	transport.RegisterProvision("shadowsocks", []string{"ss"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionShadowsocks(log, opt, so, co)
+	})
+	transport.RegisterProvision("shadowsocks-ws", []string{"ss-ws"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		opt.SSPlugin = "v2ray-plugin"
+		return provisionShadowsocks(log, opt, so, co)
+	})
+	transport.RegisterProvision("xdns", []string{"vless-mkcp", "vless-dns", "dns-tunnel"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionXDNS(log, opt, so, co)
+	})
+	transport.RegisterProvision("mdns", []string{"masterdns", "mdnsvpn"}, func(log *slog.Logger, opt types.ConfigOptions, so, co string) (transport.Result, error) {
+		return provisionMDNS(log, opt, so, co)
+	})
 }

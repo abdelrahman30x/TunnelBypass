@@ -31,7 +31,7 @@ func GRPCServiceNameFromSNI(sni string) string {
 // Matches upstream VLESS-gRPC-REALITY examples; avoids deprecated plain-TLS+gRPC.
 func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 	if opt.Port == 0 {
-		opt.Port = 443
+		opt.Port = types.DefaultTLSTunnelListenPort
 	}
 	opt.UUID = strings.TrimSpace(opt.UUID)
 	if opt.UUID == "" {
@@ -101,8 +101,8 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 					"grpcSettings": map[string]interface{}{
 						"serviceName":          serviceName,
 						"multiMode":            true,
-						"idleTimeout":          30,
-						"healthCheckTimeout":   15,
+						"idle_timeout":          30,
+						"health_check_timeout":   15,
 						"initial_windows_size": 524288,
 					},
 					"realitySettings": map[string]interface{}{
@@ -231,7 +231,6 @@ func GenerateVlessGRPCClientConfig(opt types.ConfigOptions) (string, error) {
 				"shortId":     sid,
 				"fingerprint": "chrome",
 				"serverName":  clientSNI,
-				"serverNames": names,
 			},
 		},
 	}
@@ -239,9 +238,8 @@ func GenerateVlessGRPCClientConfig(opt types.ConfigOptions) (string, error) {
 	config := map[string]interface{}{
 		"log": map[string]interface{}{
 			"loglevel": "warning",
-			"access":   getAbsLogPath("xray_grpc_access.log"),
-			"error":    getAbsLogPath("xray_grpc_error.log"),
 		},
+		"inbounds":  BuildClientInbounds(),
 		"outbounds": []interface{}{outbound},
 	}
 
@@ -282,7 +280,7 @@ func GenerateVlessGRPCURL(opt types.ConfigOptions) string {
 	tag := url.QueryEscape(fmt.Sprintf("TunnelBypass-gRPC-Reality-%s", utils.SanitizeForTag(sni)))
 
 	return fmt.Sprintf(
-		"vless://%s@%s:%d?encryption=none&security=reality&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=grpc&serviceName=%s&mode=multi&packetEncoding=xudp#%s",
+		"vless://%s@%s:%d?encryption=none&security=reality&allowInsecure=true&pbk=%s&fp=chrome&sni=%s&sid=%s&spx=%s&type=grpc&serviceName=%s&mode=multi&packetEncoding=xudp#%s",
 		opt.UUID,
 		endpoint,
 		opt.Port,

@@ -7,8 +7,11 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/transports/hysteria"
+	tbss "tunnelbypass/core/transports/shadowsocks"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
+	"tunnelbypass/core/transports/xdns"
+	"tunnelbypass/core/transports/mdns"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/runtimeenv"
 )
@@ -52,6 +55,18 @@ func InstallRunTransportService(transport string, opt types.ConfigOptions, isAdm
 			u = "tunnelbypass"
 		}
 		return installer.EnsureSshStunnelServer(opt.Port, u, pw, true, isAdmin)
+	case "shadowsocks", "ss":
+		cfg := filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")
+		return tbss.InstallShadowsocksService("TunnelBypass-Shadowsocks", cfg, opt.Port, opt)
+	case "shadowsocks-ws", "ss-ws":
+		cfg := filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")
+		return tbss.InstallShadowsocksService("TunnelBypass-Shadowsocks-WS", cfg, opt.Port, opt)
+	case "xdns":
+		cfg := filepath.Join(installer.GetConfigDir("xdns"), "server.json")
+		return xdns.InstallXDNSService("TunnelBypass-XDNS", cfg, opt.Port, opt)
+	case "mdns":
+		cfg := filepath.Join(installer.GetConfigDir("mdns"), "server_config.toml")
+		return mdns.InstallMDNSService("TunnelBypass-MasterDnsVPN", cfg, opt.Port, opt)
 	case "ssh", "udpgw":
 		return fmt.Errorf("transport %q has no OS service install path (use foreground run or portable)", t)
 	default:
