@@ -16,6 +16,7 @@ import (
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
+	"tunnelbypass/internal/destprobe"
 	"tunnelbypass/internal/elevate"
 	"tunnelbypass/internal/engine"
 	"tunnelbypass/internal/runtimeenv"
@@ -365,6 +366,96 @@ func promptSSHTLSInstallationScreen(reader *bufio.Reader) bool {
 	return ans == "y" || ans == "yes"
 }
 
+type wizardPortChoice struct {
+	Port  int
+	Label string
+}
+
+func wizardPortChoices(transport string) []wizardPortChoice {
+	choices := []wizardPortChoice{
+		{Port: types.DefaultTLSTunnelListenPort, Label: "HTTPS / SSL default"},
+		{Port: 8443, Label: "HTTPS alternate"},
+		{Port: 2053, Label: "HTTPS alternate"},
+		{Port: 2083, Label: "HTTPS alternate"},
+		{Port: 2087, Label: "HTTPS alternate"},
+		{Port: 2096, Label: "HTTPS alternate"},
+	}
+	add := func(port int, label string) {
+		if port <= 0 || port > 65535 {
+			return
+		}
+		for _, c := range choices {
+			if c.Port == port {
+				return
+			}
+		}
+		choices = append(choices, wizardPortChoice{Port: port, Label: label})
+	}
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "wireguard":
+		add(types.DefaultWireGuardListenPort, "WireGuard default")
+	case "ssh":
+		add(types.DefaultSSHSpecListenPort, "SSH default")
+	case "xdns":
+		add(types.DefaultXDNSListenPort, "DNS tunnel default")
+	case "mdns":
+		add(types.DefaultMDNSListenPort, "MasterDnsVPN DNS default")
+	}
+	return choices
+}
+
+func parseWizardPortChoice(raw string, choices []wizardPortChoice, fallback int) (port int, custom bool, ok bool) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return fallback, false, true
+	}
+	if s == "c" || s == "custom" {
+		return 0, true, true
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false, false
+	}
+	if n >= 1 && n <= len(choices) {
+		return choices[n-1].Port, false, true
+	}
+	if n >= 1 && n <= 65535 {
+		return n, false, true
+	}
+	return 0, false, false
+}
+
+func promptWizardListenPort(reader *bufio.Reader, transport string) int {
+	const defaultPort = types.DefaultTLSTunnelListenPort
+	choices := wizardPortChoices(transport)
+	for {
+		fmt.Printf("\n%s[4] Listen port%s  %s(default: %d)%s\n", ColorYellow, ColorReset, ColorGray, defaultPort, ColorReset)
+		fmt.Printf("    %sChoose an SSL/HTTPS-friendly port, or enter a custom port.%s\n", ColorGray, ColorReset)
+		for i, c := range choices {
+			defaultMark := ""
+			if c.Port == defaultPort {
+				defaultMark = ColorGray + "  ← default" + ColorReset
+			}
+			fmt.Printf("    %s%2d)%s %d  %s%s%s%s\n", ColorCyan, i+1, ColorReset, c.Port, ColorGray, c.Label, ColorReset, defaultMark)
+		}
+		fmt.Printf("    %sc)%s Custom port\n", ColorCyan, ColorReset)
+
+		raw := prompt(reader, fmt.Sprintf("\n    %sChoice [1 / Enter = %d]: %s", ColorBold, defaultPort, ColorReset))
+		port, custom, ok := parseWizardPortChoice(raw, choices, defaultPort)
+		if ok && !custom {
+			return port
+		}
+		if custom {
+			customRaw := prompt(reader, fmt.Sprintf("    %sCustom listen port [%d]: %s", ColorBold, defaultPort, ColorReset))
+			customPort := cfg.ParsePortOrDefault(customRaw, defaultPort)
+			if customPort > 0 {
+				return customPort
+			}
+		}
+		fmt.Printf("    %s[!] Enter one of the list numbers, c, or a port from 1 to 65535.%s\n", ColorYellow, ColorReset)
+	}
+}
+
 func runSetupWizard(reader *bufio.Reader) bool {
 	baseDir := installer.GetBaseDir()
 	_ = os.MkdirAll(filepath.Join(baseDir, "configs"), 0755)
@@ -531,6 +622,26 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
+	var realityDest string
+	var realityDestHost string
+	if transportSupportsRealityDestName(transport) && strings.TrimSpace(sni) != "" {
+		candidate := host_catalog.NormalizeHost(sni)
+		fmt.Printf("\n%s[2.5] Checking Reality dest candidate:%s %s\n", ColorYellow, ColorReset, candidate)
+		fmt.Printf("    %sTCP connect + public TLS certificate + HTTPS response from this server...%s ", ColorGray, ColorReset)
+		res, err := destprobe.ProbeHostWithTimeout(candidate, destprobe.DefaultTimeout)
+		if err == nil {
+			realityDest = res.Address
+			realityDestHost = res.Host
+			fmt.Printf("%sOK%s\n", ColorGreen, ColorReset)
+			fmt.Printf("    %sUsing dest:%s %s %s(HTTPS %d)%s\n", ColorGray, ColorReset, realityDest, ColorGray, res.StatusCode, ColorReset)
+		} else {
+			realityDest = host_catalog.DefaultRealityDestAddress()
+			realityDestHost = host_catalog.HostFromRealityDestAddress(realityDest)
+			fmt.Printf("%sSKIP%s\n", ColorYellow, ColorReset)
+			fmt.Printf("    %sSelected host is not safe as dest (%v). Using fallback dest: %s%s\n", ColorGray, err, realityDest, ColorReset)
+		}
+	}
+
 	var mdnsDomain string
 	if transport == "mdns" {
 		fmt.Printf("\n%s[2.5] MasterDnsVPN tunnel domain%s\n", ColorYellow, ColorReset)
@@ -572,27 +683,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		wsPathInput = vless.NormalizeWSPath(wsPathInput)
 	}
 
-	defaultPort := types.DefaultTLSTunnelListenPort
-	switch transport {
-	case "hysteria":
-		defaultPort = types.DefaultHysteriaListenPort
-	case "wireguard":
-		defaultPort = types.DefaultWireGuardListenPort
-	case "ssh":
-		defaultPort = types.DefaultSSHSpecListenPort
-	case "ssh-tls":
-		defaultPort = types.DefaultSSHTLSDirectListenPort
-	case "shadowsocks":
-		defaultPort = types.DefaultShadowsocksListenPort
-	case "shadowsocks-ws":
-		defaultPort = types.DefaultShadowsocksV2rayListenPort
-	case "xdns":
-		defaultPort = types.DefaultXDNSListenPort
-	case "mdns":
-		defaultPort = types.DefaultMDNSListenPort
-	}
-	portInput := prompt(reader, fmt.Sprintf("\n%s[4] Listen port [%d]: %s", ColorYellow, defaultPort, ColorReset))
-	port := cfg.ParsePortOrDefault(portInput, defaultPort)
+	port := promptWizardListenPort(reader, transport)
 
 	var sshUser, sshPass string
 	if transport == "ssh" || transport == "tls" || transport == "wss" || transport == "ssh-tls" {
@@ -617,11 +708,13 @@ func runSetupWizard(reader *bufio.Reader) bool {
 	}
 
 	rspec := cfg.RunSpec{
-		Transport:  transport,
-		Port:       port,
-		SNI:        strings.TrimSpace(sni),
-		WSPath:     wsPathInput,
-		MDNSDomain: strings.TrimSpace(mdnsDomain),
+		Transport:       transport,
+		Port:            port,
+		SNI:             strings.TrimSpace(sni),
+		RealityDest:     strings.TrimSpace(realityDest),
+		RealityDestHost: strings.TrimSpace(realityDestHost),
+		WSPath:          wsPathInput,
+		MDNSDomain:      strings.TrimSpace(mdnsDomain),
 	}
 	rspec.Server.Address = strings.TrimSpace(detectedIP)
 	if transport == "vless-ws" && uuidCustom != "" {

@@ -19,6 +19,9 @@ type RunSpec struct {
 	Transport string `json:"transport"`
 	Port      int    `json:"port"`
 	SNI       string `json:"sni"`
+	// RealityDest is the concrete Xray REALITY TCP camouflage target (usually host:443).
+	RealityDest     string `json:"reality_dest,omitempty"`
+	RealityDestHost string `json:"reality_dest_host,omitempty"`
 	// WSPath WebSocket path for transport vless-ws (VLESS + WS + TLS).
 	WSPath string `json:"ws_path,omitempty"`
 
@@ -91,6 +94,12 @@ func Merge(base, override RunSpec) RunSpec {
 	}
 	if strings.TrimSpace(override.SNI) != "" {
 		out.SNI = strings.TrimSpace(override.SNI)
+	}
+	if strings.TrimSpace(override.RealityDest) != "" {
+		out.RealityDest = strings.TrimSpace(override.RealityDest)
+	}
+	if strings.TrimSpace(override.RealityDestHost) != "" {
+		out.RealityDestHost = strings.TrimSpace(override.RealityDestHost)
 	}
 	if strings.TrimSpace(override.WSPath) != "" {
 		out.WSPath = strings.TrimSpace(override.WSPath)

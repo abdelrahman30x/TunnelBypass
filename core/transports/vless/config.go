@@ -21,14 +21,28 @@ type XrayConfig struct {
 	Outbounds []interface{} `json:"outbounds"`
 }
 
+func stringSliceToIface(in []string) []interface{} {
+	out := make([]interface{}, 0, len(in))
+	for _, s := range in {
+		if s == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // Xray Reality server config JSON under configs/vless.
 func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 	if opt.RealityDest == "" {
-		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
+		opt.RealityDest = host_catalog.DefaultRealityDestAddressForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
+	}
+	if opt.RealityDestHost == "" {
+		opt.RealityDestHost = host_catalog.HostFromRealityDestAddress(opt.RealityDest)
 	}
 
 	sharingSNIs := host_catalog.RealitySharingSNIs(opt.Sni, opt.ExtraSNIs)
-	serverNames := host_catalog.AppendRealityDestHosts(sharingSNIs)
+	serverNames := host_catalog.AppendRealityDestHostsForConfig(sharingSNIs, opt.RealityDestHost, opt.RealityDestExtraHosts)
 
 	sids := opt.ShortIds
 	if len(sids) == 0 {
@@ -63,8 +77,11 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 			"error":    getAbsLogPath("xray_error.log"),
 		},
 		host_catalog.MetaKey: map[string]interface{}{
-			"version":     1,
-			"sharingSNIs": sharingIface,
+			"version":               1,
+			"sharingSNIs":           sharingIface,
+			"realityDest":           opt.RealityDest,
+			"realityDestHost":       opt.RealityDestHost,
+			"realityDestExtraHosts": stringSliceToIface(opt.RealityDestExtraHosts),
 		},
 		"api": map[string]interface{}{
 			"tag":      "api",
@@ -186,6 +203,10 @@ func GenerateServerConfig(opt types.ConfigOptions) (string, error) {
 
 	configsDir := installer.GetConfigDir("vless")
 	_ = os.MkdirAll(configsDir, 0755)
+	_ = host_catalog.SaveRealityDestPrefsFile(configsDir, host_catalog.RealityDestPrefs{
+		PreferredHost: opt.RealityDestHost,
+		ExtraHosts:    opt.RealityDestExtraHosts,
+	})
 
 	fileName := "server.json"
 	targetPath := filepath.Join(configsDir, fileName)
@@ -236,7 +257,7 @@ func GenerateClientConfig(opt types.ConfigOptions) (string, error) {
 		if len(opt.ShortIds) > 0 {
 			sid = opt.ShortIds[0]
 		}
-		names := host_catalog.ServerNamesForVLESS(opt.Sni, opt.ExtraSNIs)
+		names := host_catalog.ServerNamesForVLESSConfig(opt.Sni, opt.ExtraSNIs, opt.RealityDestHost, opt.RealityDestExtraHosts)
 		clientSNI := opt.Sni
 		if clientSNI == "" && len(names) > 0 {
 			clientSNI = names[0]

@@ -19,13 +19,14 @@ import (
 type SpecFile struct {
 	Transport string `json:"transport,omitempty" yaml:"transport,omitempty"`
 
-	Port         int    `json:"port,omitempty" yaml:"port,omitempty"`
-	SNI          string `json:"sni,omitempty" yaml:"sni,omitempty"`
-	Server       string `json:"server,omitempty" yaml:"server,omitempty"`
-	ServerAddr   string `json:"server_addr,omitempty" yaml:"server_addr,omitempty"`
-	UUID         string `json:"uuid,omitempty" yaml:"uuid,omitempty"`
-	RealityDest  string `json:"reality_dest,omitempty" yaml:"reality_dest,omitempty"`
-	ObfsPassword string `json:"obfs_password,omitempty" yaml:"obfs_password,omitempty"`
+	Port            int    `json:"port,omitempty" yaml:"port,omitempty"`
+	SNI             string `json:"sni,omitempty" yaml:"sni,omitempty"`
+	Server          string `json:"server,omitempty" yaml:"server,omitempty"`
+	ServerAddr      string `json:"server_addr,omitempty" yaml:"server_addr,omitempty"`
+	UUID            string `json:"uuid,omitempty" yaml:"uuid,omitempty"`
+	RealityDest     string `json:"reality_dest,omitempty" yaml:"reality_dest,omitempty"`
+	RealityDestHost string `json:"reality_dest_host,omitempty" yaml:"reality_dest_host,omitempty"`
+	ObfsPassword    string `json:"obfs_password,omitempty" yaml:"obfs_password,omitempty"`
 
 	DataDir      string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	ClientConfig string `json:"client_config,omitempty" yaml:"client_config,omitempty"`
@@ -214,16 +215,17 @@ func SpecToConfigOptions(transport string, f SpecFile) types.ConfigOptions {
 		addr = strings.TrimSpace(f.Server)
 	}
 	return types.ConfigOptions{
-		Transport:         t,
-		ServerAddr:        addr,
-		Port:              f.Port,
-		Sni:               strings.TrimSpace(f.SNI),
-		UUID:              strings.TrimSpace(f.UUID),
-		RealityDest:       strings.TrimSpace(f.RealityDest),
-		ObfsPassword:      strings.TrimSpace(f.ObfsPassword),
-		SSHUser:           strings.TrimSpace(f.SSHUser),
-		SSHPassword:       strings.TrimSpace(f.SSHPassword),
-		SSHWelcomeMessage: "",
+		Transport:           t,
+		ServerAddr:          addr,
+		Port:                f.Port,
+		Sni:                 strings.TrimSpace(f.SNI),
+		UUID:                strings.TrimSpace(f.UUID),
+		RealityDest:         strings.TrimSpace(f.RealityDest),
+		RealityDestHost:     strings.TrimSpace(f.RealityDestHost),
+		ObfsPassword:        strings.TrimSpace(f.ObfsPassword),
+		SSHUser:             strings.TrimSpace(f.SSHUser),
+		SSHPassword:         strings.TrimSpace(f.SSHPassword),
+		SSHWelcomeMessage:   "",
 		LinuxOptimizeNet:    f.LinuxOptimizeNet,
 		LinuxDNSFix:         f.LinuxDNSFix,
 		LinuxRouter:         f.LinuxRouter,

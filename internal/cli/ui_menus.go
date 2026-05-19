@@ -27,7 +27,7 @@ func runToolsMenu(reader *bufio.Reader) {
 		fmt.Printf("%s  ╚═════════════════════════════════════════╝%s\n\n", ColorTeal+ColorBold, ColorReset)
 		fmt.Printf("  %s[1]%s  %sManage Tunnel Host Catalog%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		fmt.Printf("  %s[2]%s  %sCompletely Remove / Uninstall Service%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
-		fmt.Printf("  %s[3]%s  %sReality dest (TCP camouflage)%s  %s(hosts.json + prefs)%s\n", ColorBold+ColorWhite, ColorReset, ColorCyan, ColorReset, ColorGray, ColorReset)
+		fmt.Printf("  %s[3]%s  %sReality dest defaults (TCP camouflage)%s  %s(global fallback)%s\n", ColorBold+ColorWhite, ColorReset, ColorCyan, ColorReset, ColorGray, ColorReset)
 		fmt.Printf("\n%s  ─────────────────────────────────────────%s\n", ColorGray, ColorReset)
 		fmt.Printf("  %s[B]%s  %sBack to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 
@@ -405,6 +405,9 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 
 		fmt.Printf("  %s[6]%s  %sUninstall Service & Remove Files%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
 		fmt.Printf("  %s[7]%s  %sReinstall (Fresh Setup)%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
+		if serviceHasConfigSettings(serviceName) {
+			fmt.Printf("  %s[8]%s  %sConfig Settings%s\n", ColorBold+ColorWhite, ColorReset, ColorCyan, ColorReset)
+		}
 		fmt.Printf("  %s[Q]%s  %sExit to Main Menu%s\n", ColorBold+ColorWhite, ColorReset, ColorGray, ColorReset)
 		fmt.Printf("  %s[X]%s  %sExit Application%s\n", ColorBold+ColorWhite, ColorReset, ColorRed, ColorReset)
 
@@ -511,13 +514,24 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			time.Sleep(750 * time.Millisecond)
 			_ = runSetupWizard(reader)
 			return false
+		case "8":
+			if serviceHasConfigSettings(serviceName) {
+				runConfigSettingsMenu(reader, serviceName)
+			} else {
+				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
+				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
+			}
 		case "q", "exit":
 			return false
 		case "x":
 			return true
 		default:
 			if choice == "" {
-				fmt.Printf("    %sNo input — choose 1–7, q, or x.%s\n", ColorYellow, ColorReset)
+				if serviceHasConfigSettings(serviceName) {
+					fmt.Printf("    %sNo input — choose 1–8, q, or x.%s\n", ColorYellow, ColorReset)
+				} else {
+					fmt.Printf("    %sNo input — choose 1–7, q, or x.%s\n", ColorYellow, ColorReset)
+				}
 			} else {
 				fmt.Printf("    %sInvalid choice.%s\n", ColorRed, ColorReset)
 			}
@@ -545,7 +559,7 @@ func showServiceStatus(name string) {
 		filepath.Join(base, "logs", name+".wrapper.log"),
 		filepath.Join(base, "logs", name+".log"),
 	}
-	
+
 	if strings.Contains(name, "VLESS") || strings.Contains(name, "Reality") || strings.Contains(name, "Tunnel") || strings.Contains(name, "SSH-TLS") {
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_error.log"))
 		logCandidates = append(logCandidates, filepath.Join(base, "logs", "xray_access.log"))
@@ -562,7 +576,7 @@ func showServiceStatus(name string) {
 		// shadowsocks-rust doesn't log to file automatically; the service wrapper captures stdout
 		// which goes to name+".out.log" or TunnelBypass-Service.log.
 	}
-	
+
 	for _, logPath := range logCandidates {
 		if _, err := os.Stat(logPath); err != nil {
 			continue
@@ -590,4 +604,3 @@ func xrayServiceConfigPathAndPort(serviceName string) (string, int) {
 	}
 	return cfgPath, readInboundPortFromServerJSON(cfgPath, 443)
 }
-

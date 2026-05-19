@@ -45,7 +45,10 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 		sids = []string{"8d2c", "74d3", "3bd4", ""}
 	}
 	if strings.TrimSpace(opt.RealityDest) == "" {
-		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
+		opt.RealityDest = host_catalog.DefaultRealityDestAddressForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
+	}
+	if strings.TrimSpace(opt.RealityDestHost) == "" {
+		opt.RealityDestHost = host_catalog.HostFromRealityDestAddress(opt.RealityDest)
 	}
 
 	host := strings.TrimSpace(opt.Sni)
@@ -53,7 +56,7 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 		host = "localhost"
 	}
 	sharingSNIs := host_catalog.RealitySharingSNIs(opt.Sni, opt.ExtraSNIs)
-	serverNames := host_catalog.AppendRealityDestHosts(sharingSNIs)
+	serverNames := host_catalog.AppendRealityDestHostsForConfig(sharingSNIs, opt.RealityDestHost, opt.RealityDestExtraHosts)
 	sharingIface := make([]interface{}, len(sharingSNIs))
 	for i, s := range sharingSNIs {
 		sharingIface[i] = s
@@ -76,8 +79,11 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 			"error":    getAbsLogPath("xray_grpc_error.log"),
 		},
 		host_catalog.MetaKey: map[string]interface{}{
-			"version":     1,
-			"sharingSNIs": sharingIface,
+			"version":               1,
+			"sharingSNIs":           sharingIface,
+			"realityDest":           opt.RealityDest,
+			"realityDestHost":       opt.RealityDestHost,
+			"realityDestExtraHosts": stringSliceToIface(opt.RealityDestExtraHosts),
 		},
 		"inbounds": []interface{}{
 			map[string]interface{}{
@@ -101,8 +107,8 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 					"grpcSettings": map[string]interface{}{
 						"serviceName":          serviceName,
 						"multiMode":            true,
-						"idle_timeout":          30,
-						"health_check_timeout":   15,
+						"idle_timeout":         30,
+						"health_check_timeout": 15,
 						"initial_windows_size": 524288,
 					},
 					"realitySettings": map[string]interface{}{
@@ -167,6 +173,10 @@ func GenerateVlessGRPCServerConfig(opt types.ConfigOptions) (string, error) {
 	}
 	cfgDir := installer.GetConfigDir("vless-grpc")
 	_ = os.MkdirAll(cfgDir, 0755)
+	_ = host_catalog.SaveRealityDestPrefsFile(cfgDir, host_catalog.RealityDestPrefs{
+		PreferredHost: opt.RealityDestHost,
+		ExtraHosts:    opt.RealityDestExtraHosts,
+	})
 	targetPath := filepath.Join(cfgDir, "server.json")
 	if err := os.WriteFile(targetPath, data, 0644); err != nil {
 		return "", err
@@ -197,7 +207,7 @@ func GenerateVlessGRPCClientConfig(opt types.ConfigOptions) (string, error) {
 	if len(opt.ShortIds) > 0 {
 		sid = opt.ShortIds[0]
 	}
-	names := host_catalog.ServerNamesForVLESS(opt.Sni, opt.ExtraSNIs)
+	names := host_catalog.ServerNamesForVLESSConfig(opt.Sni, opt.ExtraSNIs, opt.RealityDestHost, opt.RealityDestExtraHosts)
 	clientSNI := opt.Sni
 	if clientSNI == "" && len(names) > 0 {
 		clientSNI = names[0]

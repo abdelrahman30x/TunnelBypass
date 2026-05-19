@@ -12,6 +12,12 @@ func ApplySpecFileToRunSpec(rspec *RunSpec, f SpecFile) {
 	if strings.TrimSpace(f.SNI) != "" {
 		rspec.SNI = strings.TrimSpace(f.SNI)
 	}
+	if strings.TrimSpace(f.RealityDest) != "" {
+		rspec.RealityDest = strings.TrimSpace(f.RealityDest)
+	}
+	if strings.TrimSpace(f.RealityDestHost) != "" {
+		rspec.RealityDestHost = strings.TrimSpace(f.RealityDestHost)
+	}
 	if strings.TrimSpace(f.ServerAddr) != "" {
 		rspec.Server.Address = strings.TrimSpace(f.ServerAddr)
 	}

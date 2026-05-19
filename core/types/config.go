@@ -3,20 +3,25 @@ package types
 import "tunnelbypass/internal/network"
 
 type ConfigOptions struct {
-	Transport    string   `json:"transport"`
-	ServerAddr   string   `json:"server"`
-	Port         int      `json:"port"`
-	UUID         string   `json:"uuid"`
-	Sni          string   `json:"sni"`
-	ExtraSNIs    []string `json:"extra_snis"`
-	ServiceName  string   `json:"service_name"`
-	PrivateKey   string   `json:"private_key"`
-	PublicKey    string   `json:"public_key"`
-	ShortIds     []string `json:"short_ids"`
-	RealityDest  string   `json:"reality_dest"`
-	Host         string   `json:"host"`
-	ObfsPassword string   `json:"obfs_password"`
-	WSPath       string   `json:"ws_path"`
+	Transport   string   `json:"transport"`
+	ServerAddr  string   `json:"server"`
+	Port        int      `json:"port"`
+	UUID        string   `json:"uuid"`
+	Sni         string   `json:"sni"`
+	ExtraSNIs   []string `json:"extra_snis"`
+	ServiceName string   `json:"service_name"`
+	PrivateKey  string   `json:"private_key"`
+	PublicKey   string   `json:"public_key"`
+	ShortIds    []string `json:"short_ids"`
+	RealityDest string   `json:"reality_dest"`
+	// RealityDestHost and RealityDestExtraHosts are per-config TCP camouflage preferences.
+	// RealityDest is the concrete Xray address (host:443), while RealityDestHost is the
+	// hostname shown in menus and added to serverNames.
+	RealityDestHost       string   `json:"reality_dest_host"`
+	RealityDestExtraHosts []string `json:"reality_dest_extra_hosts"`
+	Host                  string   `json:"host"`
+	ObfsPassword          string   `json:"obfs_password"`
+	WSPath                string   `json:"ws_path"`
 
 	// Shadowsocks-specific options.
 	SSMethod string `json:"ss_method"` // Shadowsocks cipher (default: 2022-blake3-aes-256-gcm per SS2022 / Xray docs).

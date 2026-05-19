@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/transports/hysteria"
@@ -19,6 +20,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+var restartXrayAfterSNIChange = func(serviceName, configPath string, port int) error {
+	_ = vless.UninstallXrayService(serviceName)
+	time.Sleep(1 * time.Second)
+	return vless.InstallXrayService(serviceName, configPath, port, types.ConfigOptions{})
+}
+
+var restartHysteriaAfterSNIChange = func(serviceName, configPath string, port int) error {
+	_ = hysteria.UninstallHysteriaService(serviceName)
+	time.Sleep(1 * time.Second)
+	return hysteria.InstallHysteriaService(serviceName, configPath, port, types.ConfigOptions{})
+}
 
 func displayTunnelSharingLinks(serviceName string) {
 	if strings.Contains(serviceName, "WireGuard") {
@@ -128,21 +141,35 @@ func displayTunnelSharingLinks(serviceName string) {
 
 	printConfiguredTunnelHostnames(serviceName)
 
+	detectedIP := utils.GetPublicIP()
+	links, err := vlessRealityShareLinksForService(serviceName, detectedIP)
+	if err != nil {
+		fmt.Printf("    %s✗ %v%s\n", ColorRed, err, ColorReset)
+		return
+	}
+	for _, link := range links {
+		sni := strings.TrimPrefix(link.Label, "VLESS Reality (")
+		sni = strings.TrimSuffix(sni, ")")
+		fmt.Printf("\n  %sServer:%s %s\n", ColorGreen+ColorBold, ColorReset, detectedIP)
+		fmt.Printf("  %sSNI:%s %s\n", ColorGray, ColorReset, sni)
+		fmt.Printf("  %s%s%s\n", ColorBold, link.URL, ColorReset)
+	}
+}
+
+func vlessRealityShareLinksForService(serviceName, detectedIP string) ([]utils.ShareLink, error) {
 	configPath := xrayConfigPathForSNI(serviceName)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		fmt.Printf("    ✗ Error reading config: %v\n", err)
-		return
+		return nil, fmt.Errorf("error reading config: %w", err)
 	}
 	data = utils.StripUTF8BOM(data)
 	var cfg map[string]interface{}
 	if json.Unmarshal(data, &cfg) != nil {
-		fmt.Println("    ✗ Invalid config JSON")
-		return
+		return nil, fmt.Errorf("invalid config JSON")
 	}
 	inbounds, ok := cfg["inbounds"].([]interface{})
 	if !ok || len(inbounds) == 0 {
-		return
+		return nil, fmt.Errorf("no inbounds in config")
 	}
 	ib := inbounds[0].(map[string]interface{})
 	portf, _ := ib["port"].(float64)
@@ -153,13 +180,11 @@ func displayTunnelSharingLinks(serviceName string) {
 
 	stream, ok := ib["streamSettings"].(map[string]interface{})
 	if !ok {
-		fmt.Printf("    %s✗ No streamSettings in config.%s\n", ColorRed, ColorReset)
-		return
+		return nil, fmt.Errorf("no streamSettings in config")
 	}
 	reality, ok := stream["realitySettings"].(map[string]interface{})
 	if !ok {
-		fmt.Printf("    %s[!] This config has no REALITY inbound (e.g. WebSocket-only). Check configs folder for client/sharing files.%s\n", ColorYellow, ColorReset)
-		return
+		return nil, fmt.Errorf("this config has no REALITY inbound")
 	}
 
 	sidArr, _ := reality["shortIds"].([]interface{})
@@ -187,7 +212,6 @@ func displayTunnelSharingLinks(serviceName string) {
 	cli := clients[0].(map[string]interface{})
 	uuid, _ := cli["id"].(string)
 
-	detectedIP := utils.GetPublicIP()
 	opt := types.ConfigOptions{
 		UUID:        uuid,
 		ServerAddr:  detectedIP,
@@ -208,13 +232,15 @@ func displayTunnelSharingLinks(serviceName string) {
 			}
 		}
 	}
+	var links []utils.ShareLink
 	for _, sni := range sniList {
 		opt.Sni = sni
-		u := vless.GenerateVlessURL(opt)
-		fmt.Printf("\n  %sServer:%s %s:%d\n", ColorGreen+ColorBold, ColorReset, detectedIP, port)
-		fmt.Printf("  %sSNI:%s %s\n", ColorGray, ColorReset, sni)
-		fmt.Printf("  %s%s%s\n", ColorBold, u, ColorReset)
+		links = append(links, utils.ShareLink{
+			Label: fmt.Sprintf("VLESS Reality (%s)", sni),
+			URL:   vless.GenerateVlessURL(opt),
+		})
 	}
+	return links, nil
 }
 
 // displaySSHTLSSharingLinks prints optional VLESS TCP+TLS URL from ssh-tls server.json (primary use is SSH-over-TLS apps).
@@ -478,13 +504,13 @@ func displayShadowsocksSharingLinks() {
 	detectedIP := utils.GetPublicIP()
 
 	opt := types.ConfigOptions{
-		ServerAddr:            detectedIP,
-		Port:                  port,
-		SSMethod:              method,
-		SSPassword:            password,
-		SSPlugin:              plugin,
-		SSV2rayClientCertRaw:  v2rayCertRaw,
-		SSV2rayPluginWSPath:   v2rayWSPath,
+		ServerAddr:           detectedIP,
+		Port:                 port,
+		SSMethod:             method,
+		SSPassword:           password,
+		SSPlugin:             plugin,
+		SSV2rayClientCertRaw: v2rayCertRaw,
+		SSV2rayPluginWSPath:  v2rayWSPath,
 	}
 	if plugin == "v2ray-plugin" && opt.SSV2rayClientCertRaw == "" {
 		certPath := filepath.Join(installer.GetConfigDir("shadowsocks"), "cert.crt")
@@ -565,7 +591,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 			fmt.Printf("    %s✓ Added '%s' to tunnel host list.%s\n", ColorGreen, newSni, ColorReset)
 		}
 		fmt.Println("    [*] Restarting tunnel service...")
-		_ = hysteria.InstallHysteriaService(sName, configPath, readListenPort(configPath, 443), types.ConfigOptions{})
+		_ = restartHysteriaAfterSNIChange(sName, configPath, readListenPort(configPath, 443))
 		printConfiguredTunnelHostnames(sName)
 		return
 	}
@@ -643,7 +669,17 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		sharingOnly = hostListContainsFold(namesBefore, newSni)
 		sharingList = append(sharingList, newSni)
 		sharingList = dedupeHostnamesOrdered(sharingList)
-		rs["serverNames"] = stringSliceToJSONInterfaces(host_catalog.AppendRealityDestHosts(sharingList))
+		destHost, _ := meta["realityDestHost"].(string)
+		destExtras := interfaceStringSlice(meta["realityDestExtraHosts"])
+		if p, err := host_catalog.LoadRealityDestPrefsFile(filepath.Dir(configPath)); err == nil {
+			if p.PreferredHost != "" {
+				destHost = p.PreferredHost
+			}
+			if len(p.ExtraHosts) > 0 {
+				destExtras = p.ExtraHosts
+			}
+		}
+		rs["serverNames"] = stringSliceToJSONInterfaces(host_catalog.AppendRealityDestHostsForConfig(sharingList, destHost, destExtras))
 		meta["sharingSNIs"] = stringSliceToJSONInterfaces(sharingList)
 	} else if tls, ok := stream["tlsSettings"].(map[string]interface{}); ok {
 		// VLESS-WS (and TLS-only): extend serverNames; cert must cover the name for clients to succeed.
@@ -677,7 +713,7 @@ func addNewSNIForService(reader *bufio.Reader, sName string) {
 		fmt.Printf("    %s✓ Added '%s' to server host list and sharing links.%s\n", ColorGreen, newSni, ColorReset)
 	}
 	fmt.Println("    [*] Restarting tunnel service...")
-	_ = vless.InstallXrayService(sName, configPath, readInboundPort(cfg, 443), types.ConfigOptions{})
+	_ = restartXrayAfterSNIChange(sName, configPath, readInboundPort(cfg, 443))
 	printConfiguredTunnelHostnames(sName)
 }
 

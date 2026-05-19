@@ -426,5 +426,5 @@ func effectivePrimarySNI(opt types.ConfigOptions) string {
 	if len(user) > 0 {
 		return user[0]
 	}
-	return host_catalog.FirstRealityDestHost()
+	return host_catalog.PreferredRealityDestHostForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
 }

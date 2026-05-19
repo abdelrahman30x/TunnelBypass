@@ -12,6 +12,7 @@ import (
 	"tunnelbypass/internal/engine"
 	"tunnelbypass/internal/tblog"
 	"tunnelbypass/internal/utils"
+	"tunnelbypass/tools/host_catalog"
 )
 
 const exitConfig = 2
@@ -67,6 +68,7 @@ func executeRun(rawArgs []string) int {
 	typeFlag := fs.String("type", "", "Transport name (optional if positional or spec sets it)")
 	specPath := fs.String("spec", "", "JSON or YAML run spec file")
 	sniFlag := fs.String("sni", "", "SNI / tunnel hostname (Reality, Hysteria; WSS/TLS are disabled)")
+	realityDestFlag := fs.String("reality-dest", "", "REALITY TCP camouflage dest (host or host:port); defaults to validated --sni when reachable")
 	serverFlag := fs.String("server", "", "Server public address for clients (default: detect public IP)")
 	uuidFlag := fs.String("uuid", "", "UUID or auth secret; use 'auto' to generate")
 	portFlag := fs.Int("port", 0, "Listen port (transport-specific default if 0)")
@@ -137,6 +139,15 @@ func executeRun(rawArgs []string) int {
 	rspec.Transport = transport
 	if strings.TrimSpace(*sniFlag) != "" {
 		rspec.SNI = strings.TrimSpace(*sniFlag)
+	}
+	if strings.TrimSpace(*realityDestFlag) != "" {
+		rawDest := strings.TrimSpace(*realityDestFlag)
+		if host, addr := host_catalog.NormalizeRealityDestInput(rawDest); addr != "" {
+			rspec.RealityDest = addr
+			rspec.RealityDestHost = host
+		} else {
+			rspec.RealityDest = rawDest
+		}
 	}
 	if strings.TrimSpace(*serverFlag) != "" {
 		rspec.Server.Address = strings.TrimSpace(*serverFlag)

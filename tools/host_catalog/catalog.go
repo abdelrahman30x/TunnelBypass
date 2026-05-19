@@ -293,32 +293,36 @@ func RandomRealityDestHost() string {
 	return h[r.Intn(len(h))]
 }
 
-type realityDestPrefs struct {
+type RealityDestPrefs struct {
 	PreferredHost string   `json:"preferred_host,omitempty"`
 	ExtraHosts    []string `json:"extra_hosts,omitempty"`
+}
+
+type realityDestHostsFile struct {
+	RealityDestHosts []string `json:"reality_dest_hosts"`
 }
 
 func prefsPath() string {
 	return filepath.Join(installer.GetConfigDir("catalog"), "reality_dest_prefs.json")
 }
 
-func loadPrefs() (realityDestPrefs, error) {
+func loadPrefs() (RealityDestPrefs, error) {
 	data, err := os.ReadFile(prefsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return realityDestPrefs{}, nil
+			return RealityDestPrefs{}, nil
 		}
-		return realityDestPrefs{}, err
+		return RealityDestPrefs{}, err
 	}
 	data = utils.StripUTF8BOM(data)
-	var p realityDestPrefs
+	var p RealityDestPrefs
 	if err := json.Unmarshal(data, &p); err != nil {
-		return realityDestPrefs{}, err
+		return RealityDestPrefs{}, err
 	}
 	return p, nil
 }
 
-func savePrefs(p realityDestPrefs) error {
+func savePrefs(p RealityDestPrefs) error {
 	_ = os.MkdirAll(filepath.Dir(prefsPath()), 0755)
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -327,39 +331,86 @@ func savePrefs(p realityDestPrefs) error {
 	return os.WriteFile(prefsPath(), data, 0644)
 }
 
+func RealityDestPrefsPath(configDir string) string {
+	return filepath.Join(strings.TrimSpace(configDir), "reality_dest_prefs.json")
+}
+
+func RealityDestHostsPath(configDir string) string {
+	return filepath.Join(strings.TrimSpace(configDir), "hosts.json")
+}
+
+func LoadRealityDestPrefsFile(configDir string) (RealityDestPrefs, error) {
+	data, err := os.ReadFile(RealityDestPrefsPath(configDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return RealityDestPrefs{}, nil
+		}
+		return RealityDestPrefs{}, err
+	}
+	data = utils.StripUTF8BOM(data)
+	var p RealityDestPrefs
+	if err := json.Unmarshal(data, &p); err != nil {
+		return RealityDestPrefs{}, err
+	}
+	p.PreferredHost = NormalizeHost(p.PreferredHost)
+	p.ExtraHosts = uniqueHostsOrdered(p.ExtraHosts)
+	return p, nil
+}
+
+func SaveRealityDestPrefsFile(configDir string, p RealityDestPrefs) error {
+	configDir = strings.TrimSpace(configDir)
+	if configDir == "" {
+		return nil
+	}
+	p.PreferredHost = NormalizeHost(p.PreferredHost)
+	p.ExtraHosts = uniqueHostsOrdered(p.ExtraHosts)
+	_ = os.MkdirAll(configDir, 0755)
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(RealityDestPrefsPath(configDir), data, 0644); err != nil {
+		return err
+	}
+	hostsData, err := json.MarshalIndent(realityDestHostsFile{
+		RealityDestHosts: EffectiveRealityDestHostsForPrefs(p),
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(RealityDestHostsPath(configDir), hostsData, 0644)
+}
+
 // EffectiveRealityDestHosts returns embedded reality_dest_hosts (order preserved) plus any user-added
 // extras from Diagnostic Tools. Used for Reality serverNames / Hysteria SNI and as the dest pool.
 func EffectiveRealityDestHosts() []string {
-	base := append([]string(nil), realityDestHosts...)
 	p, err := loadPrefs()
 	if err != nil {
-		p = realityDestPrefs{}
+		p = RealityDestPrefs{}
 	}
+	return EffectiveRealityDestHostsForPrefs(p)
+}
+
+func EffectiveRealityDestHostsForPrefs(p RealityDestPrefs) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, h := range base {
+	add := func(h string) {
 		n := NormalizeHost(h)
 		if n == "" {
-			continue
+			return
 		}
 		k := strings.ToLower(n)
 		if seen[k] {
-			continue
+			return
 		}
 		seen[k] = true
 		out = append(out, n)
 	}
+	for _, h := range realityDestHosts {
+		add(h)
+	}
 	for _, h := range p.ExtraHosts {
-		n := NormalizeHost(h)
-		if n == "" {
-			continue
-		}
-		k := strings.ToLower(n)
-		if seen[k] {
-			continue
-		}
-		seen[k] = true
-		out = append(out, n)
+		add(h)
 	}
 	if len(out) == 0 {
 		return []string{"www.facebook.com"}
@@ -385,13 +436,31 @@ func PreferredRealityDestHost() string {
 	return "www.facebook.com"
 }
 
+func PreferredRealityDestHostForPrefs(p RealityDestPrefs) string {
+	if cand := NormalizeHost(p.PreferredHost); cand != "" {
+		return cand
+	}
+	eff := EffectiveRealityDestHostsForPrefs(p)
+	if len(eff) > 0 {
+		return eff[0]
+	}
+	return "www.facebook.com"
+}
+
+func PreferredRealityDestHostForConfig(preferred string, extras []string) string {
+	return PreferredRealityDestHostForPrefs(RealityDestPrefs{
+		PreferredHost: preferred,
+		ExtraHosts:    extras,
+	})
+}
+
 // DefaultRealityDestAddress is the TCP target for Xray REALITY "dest" and provision defaults.
 // Hostnames in reality_dest_hosts become serverNames; some hosts map to a fixed IP (e.g. one.one.one.one → 1.1.1.1).
 func DefaultRealityDestAddress() string {
-	return realityTCPDestAddress(PreferredRealityDestHost())
+	return RealityDestAddressForHost(PreferredRealityDestHost())
 }
 
-func realityTCPDestAddress(host string) string {
+func RealityDestAddressForHost(host string) string {
 	h := NormalizeHost(host)
 	if h == "" {
 		return "www.facebook.com:443"
@@ -402,11 +471,53 @@ func realityTCPDestAddress(host string) string {
 	return h + ":443"
 }
 
+func NormalizeRealityDestInput(raw string) (host string, address string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	if h, p, err := net.SplitHostPort(raw); err == nil {
+		host = NormalizeHost(h)
+		if host == "" || strings.TrimSpace(p) == "" {
+			return "", ""
+		}
+		if strings.EqualFold(host, "one.one.one.one") && p == "443" {
+			return host, "1.1.1.1:443"
+		}
+		return host, net.JoinHostPort(host, p)
+	}
+	host = NormalizeHost(raw)
+	if host == "" {
+		return "", ""
+	}
+	return host, RealityDestAddressForHost(host)
+}
+
+func DefaultRealityDestAddressForConfig(preferred string, extras []string) string {
+	return RealityDestAddressForHost(PreferredRealityDestHostForConfig(preferred, extras))
+}
+
+func HostFromRealityDestAddress(dest string) string {
+	dest = strings.TrimSpace(dest)
+	if dest == "" {
+		return ""
+	}
+	host := dest
+	if h, _, err := net.SplitHostPort(dest); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "1.1.1.1" {
+		return "one.one.one.one"
+	}
+	return NormalizeHost(host)
+}
+
 // SetPreferredRealityDestHost persists the user's choice; empty s clears preference (use first in list).
 func SetPreferredRealityDestHost(host string) error {
 	p, err := loadPrefs()
 	if err != nil {
-		p = realityDestPrefs{}
+		p = RealityDestPrefs{}
 	}
 	p.PreferredHost = NormalizeHost(strings.TrimSpace(host))
 	return savePrefs(p)
@@ -420,7 +531,7 @@ func AddRealityDestExtraHost(host string) error {
 	}
 	p, err := loadPrefs()
 	if err != nil {
-		p = realityDestPrefs{}
+		p = RealityDestPrefs{}
 	}
 	for _, e := range p.ExtraHosts {
 		if strings.EqualFold(e, n) {
@@ -435,7 +546,7 @@ func AddRealityDestExtraHost(host string) error {
 func ClearExtraRealityDestHosts() error {
 	p, err := loadPrefs()
 	if err != nil {
-		p = realityDestPrefs{}
+		p = RealityDestPrefs{}
 	}
 	p.ExtraHosts = nil
 	return savePrefs(p)
@@ -509,10 +620,18 @@ func ServerNamesForVLESS(primary string, extras []string) []string {
 	return AppendRealityDestHosts(RealitySharingSNIs(primary, extras))
 }
 
+func ServerNamesForVLESSConfig(primary string, extras []string, preferredDest string, destExtras []string) []string {
+	return AppendRealityDestHostsForConfig(RealitySharingSNIs(primary, extras), preferredDest, destExtras)
+}
+
 // AppendRealityDestHosts returns sharing (same list as SharingLinkSNIs / RealitySharingSNIs) plus
 // mandatory Reality dest hosts from hosts.json (reality_dest_hosts), deduplicated. Order: sharing first,
 // then dest. Use for Hysteria tls.sni, Xray Reality serverNames, and metadata — never mergedDefaultHosts.
 func AppendRealityDestHosts(sharing []string) []string {
+	return AppendRealityDestHostsForConfig(sharing, "", nil)
+}
+
+func AppendRealityDestHostsForConfig(sharing []string, preferred string, extras []string) []string {
 	seen := make(map[string]bool)
 	var out []string
 	add := func(s string) {
@@ -530,7 +649,8 @@ func AppendRealityDestHosts(sharing []string) []string {
 	for _, h := range sharing {
 		add(h)
 	}
-	destPool := EffectiveRealityDestHosts()
+	add(preferred)
+	destPool := EffectiveRealityDestHostsForPrefs(RealityDestPrefs{ExtraHosts: extras})
 	for _, h := range destPool {
 		add(h)
 	}

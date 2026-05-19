@@ -25,11 +25,14 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 	if len(sharingSNIs) == 0 {
 		masq := strings.TrimSpace(opt.Sni)
 		if masq == "" {
-			masq = host_catalog.FirstRealityDestHost()
+			masq = host_catalog.PreferredRealityDestHostForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
 		}
 		sharingSNIs = []string{host_catalog.NormalizeHost(masq)}
 	}
-	serverNames := host_catalog.AppendRealityDestHosts(sharingSNIs)
+	if opt.RealityDestHost == "" {
+		opt.RealityDestHost = host_catalog.PreferredRealityDestHostForConfig("", opt.RealityDestExtraHosts)
+	}
+	serverNames := host_catalog.AppendRealityDestHostsForConfig(sharingSNIs, opt.RealityDestHost, opt.RealityDestExtraHosts)
 	sharingIface := make([]interface{}, len(sharingSNIs))
 	for i, s := range sharingSNIs {
 		sharingIface[i] = s
@@ -47,6 +50,10 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 
 	configsDir := installer.GetConfigDir("hysteria")
 	_ = os.MkdirAll(configsDir, 0755)
+	_ = host_catalog.SaveRealityDestPrefsFile(configsDir, host_catalog.RealityDestPrefs{
+		PreferredHost: opt.RealityDestHost,
+		ExtraHosts:    opt.RealityDestExtraHosts,
+	})
 	certPath := filepath.ToSlash(filepath.Join(configsDir, "cert.pem"))
 	keyPath := filepath.ToSlash(filepath.Join(configsDir, "key.pem"))
 	_ = installer.EnsureSelfSignedCert(certPath, keyPath, clientSNI)
@@ -103,9 +110,11 @@ func GenerateHysteriaConfig(opt types.ConfigOptions) (string, string, error) {
 			"accessLog":       false,
 		},
 		host_catalog.MetaKey: map[string]interface{}{
-			"serverNames": serverNames,
-			"sharingSNIs": sharingIface,
-			"version":     1,
+			"serverNames":           serverNames,
+			"sharingSNIs":           sharingIface,
+			"realityDestHost":       opt.RealityDestHost,
+			"realityDestExtraHosts": stringsToYAMLIface(opt.RealityDestExtraHosts),
+			"version":               1,
 			// Extra metadata for UI/branding purposes.
 			"name": fmt.Sprintf("TunnelBypass-%s", masquerade),
 		},
@@ -175,7 +184,7 @@ func effectivePrimarySNI(opt types.ConfigOptions) string {
 	if len(user) > 0 {
 		return user[0]
 	}
-	return host_catalog.FirstRealityDestHost()
+	return host_catalog.PreferredRealityDestHostForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
 }
 
 func GenerateHysteriaURLForSNI(opt types.ConfigOptions, sni string) string {
@@ -312,7 +321,9 @@ func AppendServerName(configPath, newSni string) (added bool, sharingOnly bool, 
 	inNamesBefore := hostListContainsFold(namesBefore, newSni)
 
 	sharingStrs = append(sharingStrs, newSni)
-	serverNames := host_catalog.AppendRealityDestHosts(sharingStrs)
+	destHost, _ := meta["realityDestHost"].(string)
+	destExtras := yamlStringSlice(meta["realityDestExtraHosts"])
+	serverNames := host_catalog.AppendRealityDestHostsForConfig(sharingStrs, destHost, destExtras)
 
 	meta["sharingSNIs"] = stringsToYAMLIface(sharingStrs)
 	meta["serverNames"] = stringsToYAMLIface(serverNames)

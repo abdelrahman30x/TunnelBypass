@@ -18,6 +18,7 @@ import (
 	"tunnelbypass/core/transports/wireguard"
 	"tunnelbypass/core/transports/xdns"
 	"tunnelbypass/core/types"
+	"tunnelbypass/internal/destprobe"
 	"tunnelbypass/internal/utils"
 	"tunnelbypass/tools/host_catalog"
 )
@@ -74,6 +75,37 @@ func CopyFileIfDifferent(log *slog.Logger, canonicalSrc, dst string) error {
 	return nil
 }
 
+func ensureRealityDest(log *slog.Logger, opt *types.ConfigOptions) {
+	if strings.TrimSpace(opt.RealityDest) != "" {
+		if host, addr := host_catalog.NormalizeRealityDestInput(opt.RealityDest); addr != "" {
+			opt.RealityDest = addr
+			if strings.TrimSpace(opt.RealityDestHost) == "" {
+				opt.RealityDestHost = host
+			}
+		}
+		if strings.TrimSpace(opt.RealityDestHost) == "" {
+			opt.RealityDestHost = host_catalog.HostFromRealityDestAddress(opt.RealityDest)
+		}
+		return
+	}
+	if sni := host_catalog.NormalizeHost(opt.Sni); sni != "" {
+		if res, err := destprobe.ProbeHostWithTimeout(sni, destprobe.DefaultTimeout); err == nil {
+			opt.RealityDest = res.Address
+			opt.RealityDestHost = res.Host
+			if log != nil {
+				log.Info("provision: using selected SNI as REALITY dest", "host", res.Host, "dest", res.Address, "status", res.StatusCode)
+			}
+			return
+		} else if log != nil {
+			log.Warn("provision: selected SNI is not safe as REALITY dest; falling back to config/default dest", "host", sni, "err", err)
+		}
+	}
+	opt.RealityDest = host_catalog.DefaultRealityDestAddressForConfig(opt.RealityDestHost, opt.RealityDestExtraHosts)
+	if strings.TrimSpace(opt.RealityDestHost) == "" {
+		opt.RealityDestHost = host_catalog.HostFromRealityDestAddress(opt.RealityDest)
+	}
+}
+
 func ByTransport(log *slog.Logger, transport string, opt types.ConfigOptions, serverConfigOut, clientConfigOut string) (Result, error) {
 	baseDir := installer.GetBaseDir()
 	_ = os.MkdirAll(filepath.Join(baseDir, "configs"), 0755)
@@ -102,9 +134,7 @@ func provisionReality(log *slog.Logger, opt types.ConfigOptions, serverOut, clie
 	if len(opt.ShortIds) == 0 {
 		opt.ShortIds = utils.GenerateRandomShortIds()
 	}
-	if strings.TrimSpace(opt.RealityDest) == "" {
-		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
-	}
+	ensureRealityDest(log, &opt)
 
 	srv, err := vless.GenerateServerConfig(opt)
 	if err != nil {
@@ -234,9 +264,7 @@ func provisionVlessGRPC(log *slog.Logger, opt types.ConfigOptions, serverOut, cl
 	if len(opt.ShortIds) == 0 {
 		opt.ShortIds = utils.GenerateRandomShortIds()
 	}
-	if strings.TrimSpace(opt.RealityDest) == "" {
-		opt.RealityDest = host_catalog.DefaultRealityDestAddress()
-	}
+	ensureRealityDest(log, &opt)
 
 	srv, err := vless.GenerateVlessGRPCServerConfig(opt)
 	if err != nil {
