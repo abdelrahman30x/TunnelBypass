@@ -57,3 +57,25 @@ func TestWizardPortChoicesIncludeTransportDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestWizardDNSPortDefaultsTo53(t *testing.T) {
+	for _, transport := range []string{"xdns", "mdns"} {
+		t.Run(transport, func(t *testing.T) {
+			choices := wizardPortChoices(transport)
+			if len(choices) == 0 || choices[0].Port != 53 {
+				t.Fatalf("first choice got %#v, want port 53 first", choices)
+			}
+			if got := wizardDefaultListenPort(transport); got != 53 {
+				t.Fatalf("default got %d, want 53", got)
+			}
+			gotPort, gotCustom, gotOK := parseWizardPortChoice("", choices, wizardDefaultListenPort(transport))
+			if gotPort != 53 || gotCustom || !gotOK {
+				t.Fatalf("empty choice got port=%d custom=%v ok=%v, want 53 false true", gotPort, gotCustom, gotOK)
+			}
+			gotPort, gotCustom, gotOK = parseWizardPortChoice("1", choices, wizardDefaultListenPort(transport))
+			if gotPort != 53 || gotCustom || !gotOK {
+				t.Fatalf("choice 1 got port=%d custom=%v ok=%v, want 53 false true", gotPort, gotCustom, gotOK)
+			}
+		})
+	}
+}

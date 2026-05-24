@@ -372,14 +372,8 @@ type wizardPortChoice struct {
 }
 
 func wizardPortChoices(transport string) []wizardPortChoice {
-	choices := []wizardPortChoice{
-		{Port: types.DefaultTLSTunnelListenPort, Label: "HTTPS / SSL default"},
-		{Port: 8443, Label: "HTTPS alternate"},
-		{Port: 2053, Label: "HTTPS alternate"},
-		{Port: 2083, Label: "HTTPS alternate"},
-		{Port: 2087, Label: "HTTPS alternate"},
-		{Port: 2096, Label: "HTTPS alternate"},
-	}
+	defaultPort := wizardDefaultListenPort(transport)
+	choices := []wizardPortChoice{{Port: defaultPort, Label: wizardDefaultPortLabel(transport, defaultPort)}}
 	add := func(port int, label string) {
 		if port <= 0 || port > 65535 {
 			return
@@ -390,6 +384,16 @@ func wizardPortChoices(transport string) []wizardPortChoice {
 			}
 		}
 		choices = append(choices, wizardPortChoice{Port: port, Label: label})
+	}
+	for _, c := range []wizardPortChoice{
+		{Port: types.DefaultTLSTunnelListenPort, Label: "HTTPS / SSL default"},
+		{Port: 8443, Label: "HTTPS alternate"},
+		{Port: 2053, Label: "HTTPS alternate"},
+		{Port: 2083, Label: "HTTPS alternate"},
+		{Port: 2087, Label: "HTTPS alternate"},
+		{Port: 2096, Label: "HTTPS alternate"},
+	} {
+		add(c.Port, c.Label)
 	}
 	switch strings.ToLower(strings.TrimSpace(transport)) {
 	case "wireguard":
@@ -402,6 +406,31 @@ func wizardPortChoices(transport string) []wizardPortChoice {
 		add(types.DefaultMDNSListenPort, "MasterDnsVPN DNS default")
 	}
 	return choices
+}
+
+func wizardDefaultListenPort(transport string) int {
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "xdns":
+		return types.DefaultXDNSListenPort
+	case "mdns":
+		return types.DefaultMDNSListenPort
+	default:
+		return types.DefaultTLSTunnelListenPort
+	}
+}
+
+func wizardDefaultPortLabel(transport string, port int) string {
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "xdns":
+		return "DNS tunnel default"
+	case "mdns":
+		return "MasterDnsVPN DNS default"
+	default:
+		if port == types.DefaultTLSTunnelListenPort {
+			return "HTTPS / SSL default"
+		}
+		return "Protocol default"
+	}
 }
 
 func parseWizardPortChoice(raw string, choices []wizardPortChoice, fallback int) (port int, custom bool, ok bool) {
@@ -426,11 +455,15 @@ func parseWizardPortChoice(raw string, choices []wizardPortChoice, fallback int)
 }
 
 func promptWizardListenPort(reader *bufio.Reader, transport string) int {
-	const defaultPort = types.DefaultTLSTunnelListenPort
+	defaultPort := wizardDefaultListenPort(transport)
 	choices := wizardPortChoices(transport)
 	for {
 		fmt.Printf("\n%s[4] Listen port%s  %s(default: %d)%s\n", ColorYellow, ColorReset, ColorGray, defaultPort, ColorReset)
-		fmt.Printf("    %sChoose an SSL/HTTPS-friendly port, or enter a custom port.%s\n", ColorGray, ColorReset)
+		if defaultPort == types.DefaultXDNSListenPort {
+			fmt.Printf("    %sDNS tunnel modes usually use port 53; SSL/HTTPS-friendly alternatives are also listed.%s\n", ColorGray, ColorReset)
+		} else {
+			fmt.Printf("    %sChoose an SSL/HTTPS-friendly port, or enter a custom port.%s\n", ColorGray, ColorReset)
+		}
 		for i, c := range choices {
 			defaultMark := ""
 			if c.Port == defaultPort {
