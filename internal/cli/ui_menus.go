@@ -258,15 +258,11 @@ func runManageServiceMenu(reader *bufio.Reader) {
 			if sName == "" {
 				continue
 			}
-			if strings.Contains(sName, "Hysteria") {
-				_ = hysteria.UninstallHysteriaService(sName)
-			} else if strings.Contains(sName, "WireGuard") {
-				_ = wireguard.UninstallWireGuardService(sName)
-			} else if strings.Contains(sName, "Shadowsocks") {
-				installer.UninstallService(sName)
-			} else {
-				_ = vless.UninstallXrayService(sName)
+			if err := uninstallTransportService(detectInstalledTransport(sName), sName); err != nil {
+				fmt.Printf("    %s✗ Failed: %v%s\n", ColorRed, err, ColorReset)
+				continue
 			}
+			removePortAllocState(sName)
 			fmt.Printf("    %sService stopped and removed.%s\n", ColorGreen, ColorReset)
 		case "4":
 			fmt.Printf("    %sStarting service (reinstalling with existing config)...%s\n", ColorYellow, ColorReset)
@@ -290,20 +286,10 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				continue
 			}
 			fmt.Printf("\n%s[!] Removing %s Service...%s\n", ColorRed, sName, ColorReset)
-			var err error
-			if strings.Contains(sName, "Hysteria") {
-				err = hysteria.UninstallHysteriaService(sName)
-			} else if strings.Contains(sName, "WireGuard") {
-				err = wireguard.UninstallWireGuardService(sName)
-			} else if strings.Contains(sName, "Shadowsocks") {
-				installer.UninstallService(sName)
-			} else {
-				err = vless.UninstallXrayService(sName)
-			}
-			if err == nil {
-				fmt.Printf("    %s✓ Service removed.%s\n", ColorGreen, ColorReset)
-			} else {
+			if err := uninstallServiceAndFiles(sName, true); err != nil {
 				fmt.Printf("    %s✗ Failed: %v%s\n", ColorRed, err, ColorReset)
+			} else {
+				fmt.Printf("    %s✓ Service, files, and linked companions removed.%s\n", ColorGreen, ColorReset)
 			}
 		case "b", "back":
 			return
@@ -311,22 +297,6 @@ func runManageServiceMenu(reader *bufio.Reader) {
 			fmt.Printf("\n%sInvalid choice. Try 1–5 or b.%s\n", ColorRed, ColorReset)
 		}
 	}
-}
-
-func maybeRemoveCompanionUDPGW(reader *bufio.Reader) {
-	if !serviceExists(installer.UDPGWServiceName) {
-		return
-	}
-	fmt.Printf("\n    %sCompanion %s is still installed.%s\n", ColorYellow, installer.UDPGWServiceName, ColorReset)
-	ans := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("    %sRemove UDPGW as well? [Y/n]: %s", ColorBold, ColorReset))))
-	if ans == "n" || ans == "no" {
-		fmt.Printf("    %sKept %s.%s\n", ColorGray, installer.UDPGWServiceName, ColorReset)
-		return
-	}
-	installer.UninstallService(installer.UDPGWServiceName)
-	removePortAllocState(installer.UDPGWServiceName)
-	cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
-	fmt.Printf("    %s✓ %s removed.%s\n", ColorGreen, installer.UDPGWServiceName, ColorReset)
 }
 
 func showUDPGWInstalledMenu(reader *bufio.Reader, serviceName string) bool {
@@ -348,14 +318,21 @@ func showUDPGWInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "3":
 			fmt.Printf("\n    %s[*] Stopping %s...%s\n", ColorYellow, serviceName, ColorReset)
-			installer.UninstallService(serviceName)
+			if err := uninstallTransportService(transportUDPGW, serviceName); err != nil {
+				fmt.Printf("    %s✗ Failed: %v%s\n", ColorRed, err, ColorReset)
+				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
+				continue
+			}
+			removePortAllocState(serviceName)
 			fmt.Printf("    %s✓ Service stopped.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "6":
 			fmt.Printf("\n%s[!] Uninstalling %s...%s\n", ColorRed, serviceName, ColorReset)
-			installer.UninstallService(serviceName)
-			removePortAllocState(serviceName)
-			cleanupArtifactsForTransport(transportUDPGW, serviceName)
+			if err := uninstallServiceAndFiles(serviceName, false); err != nil {
+				fmt.Printf("    %s✗ Failed: %v%s\n", ColorRed, err, ColorReset)
+				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
+				continue
+			}
 			fmt.Printf("    %s✓ Service removed.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			return false
@@ -389,7 +366,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 		fmt.Printf("  %s[3]%s  %sStop Service%s\n", ColorBold+ColorWhite, ColorReset, ColorYellow, ColorReset)
 
 		switch tr {
-		case transportXray, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
+		case transportXray, transportVLESSWS, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
 			fmt.Printf("  %s[4]%s  %sAdd tunnel hostname (SNI)%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 			fmt.Printf("  %s[5]%s  %sShow sharing links%s\n", ColorBold+ColorWhite, ColorReset, ColorMagenta, ColorReset)
 		case transportXDNS:
@@ -446,22 +423,17 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "3":
 			fmt.Printf("\n    %s[*] Stopping %s...%s\n", ColorYellow, serviceName, ColorReset)
-			if tr == transportHysteria {
-				_ = hysteria.UninstallHysteriaService(serviceName)
-			} else if tr == transportWireGuard {
-				_ = wireguard.UninstallWireGuardService(serviceName)
-			} else if tr == transportShadowsocks || tr == transportShadowsocksWS {
-				installer.UninstallService(serviceName)
-			} else if tr == transportMDNS {
-				installer.UninstallService(serviceName)
-			} else {
-				_ = vless.UninstallXrayService(serviceName)
+			if err := uninstallTransportService(tr, serviceName); err != nil {
+				fmt.Printf("    %s✗ Failed: %v%s\n", ColorRed, err, ColorReset)
+				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
+				continue
 			}
+			removePortAllocState(serviceName)
 			fmt.Printf("    %s✓ Service Stopped.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "4":
 			switch tr {
-			case transportXray, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
+			case transportXray, transportVLESSWS, transportHysteria, transportSSHTLS, transportGRPC, transportShadowsocks, transportShadowsocksWS:
 				addNewSNIForService(reader, serviceName)
 			case transportXDNS:
 				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
@@ -478,7 +450,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			}
 		case "5":
-			if tr == transportXray || tr == transportHysteria || tr == transportSSHTLS || tr == transportGRPC || tr == transportShadowsocks || tr == transportShadowsocksWS || tr == transportXDNS {
+			if tr == transportXray || tr == transportVLESSWS || tr == transportHysteria || tr == transportSSHTLS || tr == transportGRPC || tr == transportShadowsocks || tr == transportShadowsocksWS || tr == transportXDNS {
 				displayTunnelSharingLinks(serviceName)
 			} else {
 				fmt.Printf("    %sNot available for this tunnel type.%s\n", ColorYellow, ColorReset)
@@ -486,22 +458,13 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 		case "6":
 			fmt.Printf("\n%s[!] Uninstalling %s...%s\n", ColorRed, serviceName, ColorReset)
-			if tr == transportHysteria {
-				_ = hysteria.UninstallHysteriaService(serviceName)
-			} else if tr == transportWireGuard {
-				_ = wireguard.UninstallWireGuardService(serviceName)
-			} else if tr == transportShadowsocks || tr == transportShadowsocksWS {
-				installer.UninstallService(serviceName)
-			} else if tr == transportMDNS {
-				installer.UninstallService(serviceName)
+			if err := uninstallServiceAndFiles(serviceName, true); err != nil {
+				fmt.Printf("    %s✗ Cleanup warning: %v%s\n", ColorRed, err, ColorReset)
+			} else if sshBackedTransport(tr) {
+				fmt.Printf("    %s✓ All files, service, SSH backend, and UDPGW companions removed when no longer shared.%s\n", ColorGreen, ColorReset)
 			} else {
-				_ = vless.UninstallXrayService(serviceName)
+				fmt.Printf("    %s✓ All files and services removed.%s\n", ColorGreen, ColorReset)
 			}
-			cleanupArtifactsForTransport(tr, serviceName)
-			if tr == transportSSH || tr == transportSSL || tr == transportWSS || tr == transportSSHTLS {
-				maybeRemoveCompanionUDPGW(reader)
-			}
-			fmt.Printf("    %s✓ All files and services removed.%s\n", ColorGreen, ColorReset)
 			prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			return false
 		case "7":

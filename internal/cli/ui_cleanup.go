@@ -1,9 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,16 +18,17 @@ import (
 type installedTransport string
 
 const (
-	transportXray      installedTransport = "xray"
-	transportHysteria  installedTransport = "hysteria"
-	transportWireGuard installedTransport = "wireguard"
-	transportSSH       installedTransport = "ssh"
-	transportSSL       installedTransport = "ssl"
-	transportWSS       installedTransport = "wss"
-	transportSSHTLS    installedTransport = "ssh-tls"
-	transportGRPC      installedTransport = "grpc"
-	transportUDPGW       installedTransport = "udpgw"
-	transportShadowsocks installedTransport = "shadowsocks"
+	transportXray          installedTransport = "xray"
+	transportVLESSWS       installedTransport = "vless-ws"
+	transportHysteria      installedTransport = "hysteria"
+	transportWireGuard     installedTransport = "wireguard"
+	transportSSH           installedTransport = "ssh"
+	transportSSL           installedTransport = "ssl"
+	transportWSS           installedTransport = "wss"
+	transportSSHTLS        installedTransport = "ssh-tls"
+	transportGRPC          installedTransport = "grpc"
+	transportUDPGW         installedTransport = "udpgw"
+	transportShadowsocks   installedTransport = "shadowsocks"
 	transportShadowsocksWS installedTransport = "shadowsocks-ws"
 	transportXDNS          installedTransport = "xdns"
 	transportMDNS          installedTransport = "mdns"
@@ -39,6 +40,10 @@ func detectInstalledTransport(serviceName string) installedTransport {
 	switch {
 	case strings.Contains(s, "ssh-tls"):
 		return transportSSHTLS
+	case strings.Contains(s, "ssh-forwarder"):
+		return transportSSH
+	case strings.Contains(s, "vless-ws"):
+		return transportVLESSWS
 	case strings.Contains(s, "grpc"):
 		return transportGRPC
 	case strings.Contains(s, "hysteria"):
@@ -101,50 +106,111 @@ func detectInstalledTransport(serviceName string) installedTransport {
 }
 
 func freshSetupCleanup(serviceName string) error {
-	tr := detectInstalledTransport(serviceName)
+	return uninstallServiceAndFiles(serviceName, true)
+}
 
-	if serviceName != "" {
-		if strings.Contains(serviceName, "Hysteria") {
-			_ = hysteria.UninstallHysteriaService(serviceName)
-		} else if strings.Contains(serviceName, "WireGuard") || strings.HasPrefix(serviceName, "WireGuardTunnel$") || strings.HasPrefix(serviceName, "wg-quick@") {
-			_ = wireguard.UninstallWireGuardService(serviceName)
-		} else if strings.Contains(serviceName, "Shadowsocks") {
-			installer.UninstallService(serviceName)
-		} else {
-			_ = vless.UninstallXrayService(serviceName)
+func uninstallServiceAndFiles(serviceName string, includeCompanions bool) error {
+	serviceName = strings.TrimSpace(serviceName)
+	if serviceName == "" {
+		return nil
+	}
+	names := []string{serviceName}
+	if includeCompanions {
+		names = append(names, removableCompanionServices(serviceName)...)
+	}
+	names = dedupeServiceNames(names)
+
+	var errs []error
+	for _, name := range names {
+		tr := detectInstalledTransport(name)
+		if err := uninstallTransportService(tr, name); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", prettyServiceName(name), err))
 		}
+		removePortAllocState(name)
+		cleanupArtifactsForTransport(tr, name)
+	}
+	runLinuxRollbackIfNoTunnelBypassServices(serviceName)
+	return errors.Join(errs...)
+}
 
+func uninstallTransportService(tr installedTransport, serviceName string) error {
+	switch tr {
+	case transportHysteria:
+		return hysteria.UninstallHysteriaService(serviceName)
+	case transportWireGuard:
+		return wireguard.UninstallWireGuardService(serviceName)
+	case transportXray, transportVLESSWS, transportGRPC, transportSSHTLS, transportXDNS:
+		return vless.UninstallXrayService(serviceName)
+	default:
 		installer.UninstallService(serviceName)
-		removePortAllocState(serviceName)
+		return nil
 	}
+}
 
-	if runtime.GOOS == "windows" {
-		_ = exec.Command("taskkill", "/F", "/IM", "xray.exe").Run()
-		_ = exec.Command("taskkill", "/F", "/IM", "hysteria.exe").Run()
-		_ = exec.Command("taskkill", "/F", "/IM", "wstunnel.exe").Run()
-		_ = exec.Command("taskkill", "/F", "/IM", "stunnel.exe").Run()
-		_ = exec.Command("taskkill", "/F", "/IM", "ssserver.exe").Run()
-		_ = exec.Command("taskkill", "/F", "/IM", "masterdnsvpn-server.exe").Run()
-	} else {
-		// Global sysctl/iptables rollback must not run while another TunnelBypass OS service still
-		// exists (Last Standing Man). Only after removing a service do we check remaining units.
-		if strings.TrimSpace(serviceName) != "" {
-			if installer.RemainingTunnelBypassSystemdUnitCount() == 0 {
-				installer.RunLinuxRollback()
-			} else {
-				fmt.Fprintf(os.Stderr, "[*] Other TunnelBypass OS services remain; skipping global network rollback (sysctl/iptables).\n")
-			}
+func dedupeServiceNames(names []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
 		}
-		_ = exec.Command("pkill", "-9", "xray").Run()
-		_ = exec.Command("pkill", "-9", "hysteria").Run()
-		_ = exec.Command("pkill", "-9", "wstunnel").Run()
-		_ = exec.Command("pkill", "-9", "stunnel").Run()
-		_ = exec.Command("pkill", "-9", "ssserver").Run()
-		_ = exec.Command("pkill", "-9", "masterdnsvpn-server").Run()
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, name)
 	}
+	return out
+}
 
-	cleanupArtifactsForTransport(tr, serviceName)
-	return nil
+func sshBackedTransport(tr installedTransport) bool {
+	switch tr {
+	case transportSSH, transportSSL, transportWSS, transportSSHTLS:
+		return true
+	default:
+		return false
+	}
+}
+
+func removableCompanionServices(primary string) []string {
+	tr := detectInstalledTransport(primary)
+	if !sshBackedTransport(tr) {
+		return nil
+	}
+	if tr != transportSSH && otherSSHFrontendsInstalled(primary) {
+		fmt.Fprintf(os.Stderr, "[*] Other SSH-backed TunnelBypass services remain; keeping shared SSH/UDPGW companions.\n")
+		return nil
+	}
+	return []string{
+		"TunnelBypass-SSH",
+		"TunnelBypass-SSH-Forwarder",
+		installer.UDPGWServiceName,
+	}
+}
+
+func otherSSHFrontendsInstalled(primary string) bool {
+	for _, name := range []string{"TunnelBypass-WSS", "TunnelBypass-SSL", "TunnelBypass-SSH-TLS"} {
+		if strings.EqualFold(name, primary) {
+			continue
+		}
+		if serviceExists(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func runLinuxRollbackIfNoTunnelBypassServices(serviceName string) {
+	if strings.TrimSpace(serviceName) == "" || runtime.GOOS != "linux" {
+		return
+	}
+	if len(findInstalledServices()) == 0 {
+		installer.RunLinuxRollback()
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[*] Other TunnelBypass OS services remain; skipping global network rollback (sysctl/iptables).\n")
 }
 
 func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
@@ -152,6 +218,8 @@ func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
 	switch tr {
 	case transportXray:
 		_ = os.RemoveAll(installer.GetConfigDir("vless"))
+	case transportVLESSWS:
+		_ = os.RemoveAll(installer.GetConfigDir("vless-ws"))
 	case transportHysteria:
 		_ = os.RemoveAll(installer.GetConfigDir("hysteria"))
 	case transportWireGuard:
@@ -180,6 +248,7 @@ func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
 		_ = os.Remove(filepath.Join(baseDir, "logs", serviceName+".out.log"))
 		_ = os.Remove(filepath.Join(baseDir, "logs", serviceName+".err.log"))
 		_ = os.Remove(filepath.Join(baseDir, "logs", serviceName+".wrapper.log"))
+		_ = os.Remove(filepath.Join(baseDir, "logs", serviceName+".log"))
 	}
 }
 

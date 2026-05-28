@@ -160,14 +160,22 @@ func OSServiceNameForTransport(t string) string {
 		return "TunnelBypass-Hysteria"
 	case "wireguard":
 		return "TunnelBypass-WireGuard"
+	case "ssh":
+		return "TunnelBypass-SSH"
 	case "wss":
 		return "TunnelBypass-WSS"
 	case "tls":
 		return "TunnelBypass-SSL"
+	case "shadowsocks", "ss":
+		return "TunnelBypass-Shadowsocks"
+	case "shadowsocks-ws", "ss-ws":
+		return "TunnelBypass-Shadowsocks-WS"
 	case "xdns":
 		return "TunnelBypass-XDNS"
 	case "mdns":
 		return "TunnelBypass-MasterDnsVPN"
+	case "udpgw":
+		return "TunnelBypass-UDPGW"
 	default:
 		return ""
 	}

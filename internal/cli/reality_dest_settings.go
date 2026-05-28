@@ -102,7 +102,7 @@ func runConfigSettingsMenu(reader *bufio.Reader, serviceName string) {
 
 func serverConfigPathForService(serviceName string) (string, bool) {
 	switch detectInstalledTransport(serviceName) {
-	case transportXray, transportGRPC, transportSSHTLS, transportXDNS:
+	case transportXray, transportVLESSWS, transportGRPC, transportSSHTLS, transportXDNS:
 		return xrayConfigPathForSNI(serviceName), true
 	case transportHysteria:
 		return filepath.Join(installer.GetConfigDir("hysteria"), "server.yaml"), true

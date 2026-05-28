@@ -107,6 +107,7 @@ func TestServerConfigPathForService(t *testing.T) {
 		wantEnd string
 	}{
 		{"TunnelBypass-VLESS", filepath.Join("configs", "vless", "server.json")},
+		{"TunnelBypass-VLESS-WS", filepath.Join("configs", "vless-ws", "server.json")},
 		{"TunnelBypass-VLESS-GRPC", filepath.Join("configs", "vless-grpc", "server.json")},
 		{"TunnelBypass-Hysteria", filepath.Join("configs", "hysteria", "server.yaml")},
 		{"TunnelBypass-Shadowsocks", filepath.Join("configs", "shadowsocks", "server.json")},

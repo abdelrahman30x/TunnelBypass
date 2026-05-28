@@ -12,9 +12,6 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/svcman"
-	"tunnelbypass/core/transports/hysteria"
-	"tunnelbypass/core/transports/vless"
-	"tunnelbypass/core/transports/wireguard"
 )
 
 func findInstalledService() string {
@@ -36,6 +33,7 @@ func findInstalledServices() []string {
 		"TunnelBypass-WireGuard",
 		installer.UDPGWServiceName,
 		"TunnelBypass-SSH",
+		"TunnelBypass-SSH-Forwarder",
 		"TunnelBypass-SSL",
 		"TunnelBypass-WSS",
 		"TunnelBypass-Tunnel",
@@ -112,8 +110,7 @@ func uninstallAllServices(services []string) {
 		return
 	}
 	fmt.Printf("\n    %s[*] Uninstalling all detected services...%s\n", ColorYellow, ColorReset)
-	// If UDPGW is already in the services list it will be uninstalled by the main loop.
-	// Pre-mark it so the SSH/WSS dependency block doesn't trigger a duplicate removal.
+	// If UDPGW is already in the selected list, the main loop will handle it.
 	udpgwUninstalled := false
 	for _, s := range services {
 		if strings.EqualFold(s, installer.UDPGWServiceName) {
@@ -122,39 +119,22 @@ func uninstallAllServices(services []string) {
 		}
 	}
 	for _, s := range services {
-		tr := detectInstalledTransport(s)
-		var err error
-		if strings.Contains(s, "Hysteria") {
-			err = hysteria.UninstallHysteriaService(s)
-		} else if strings.Contains(s, "WireGuard") || strings.HasPrefix(s, "WireGuardTunnel$") || strings.HasPrefix(s, "wg-quick@") {
-			err = wireguard.UninstallWireGuardService(s)
-		} else {
-			err = vless.UninstallXrayService(s)
-		}
-		if err != nil {
+		if err := uninstallServiceAndFiles(s, true); err != nil {
 			fmt.Printf("    %s✗ %s: %v%s\n", ColorRed, prettyServiceName(s), err, ColorReset)
 		} else {
 			fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(s), ColorReset)
-			removePortAllocState(s)
-			cleanupArtifactsForTransport(tr, s)
-			// Uninstall UDPGW as a dependency of SSH-based transports (only once)
-			if !udpgwUninstalled && (tr == transportSSH || tr == transportSSL || tr == transportWSS || tr == transportSSHTLS) {
-				if serviceExists(installer.UDPGWServiceName) {
-					installer.UninstallService(installer.UDPGWServiceName)
-					removePortAllocState(installer.UDPGWServiceName)
-					cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
-					fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(installer.UDPGWServiceName), ColorReset)
-					udpgwUninstalled = true
-				}
+			if strings.EqualFold(s, installer.UDPGWServiceName) {
+				udpgwUninstalled = true
 			}
 		}
 	}
 	// If no SSH-based transport was found but UDPGW exists, uninstall it separately
 	if !udpgwUninstalled && serviceExists(installer.UDPGWServiceName) {
-		installer.UninstallService(installer.UDPGWServiceName)
-		removePortAllocState(installer.UDPGWServiceName)
-		cleanupArtifactsForTransport(transportUDPGW, installer.UDPGWServiceName)
-		fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(installer.UDPGWServiceName), ColorReset)
+		if err := uninstallServiceAndFiles(installer.UDPGWServiceName, false); err != nil {
+			fmt.Printf("    %s✗ %s: %v%s\n", ColorRed, prettyServiceName(installer.UDPGWServiceName), err, ColorReset)
+		} else {
+			fmt.Printf("    %s✓ Uninstalled:%s %s%s%s\n", ColorGreen, ColorReset, ColorBold, prettyServiceName(installer.UDPGWServiceName), ColorReset)
+		}
 	}
 }
 

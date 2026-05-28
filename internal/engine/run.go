@@ -65,7 +65,7 @@ func conflictCommandHint(spec cfg.RunSpec) string {
 
 func transportInstallsOSService(transport string) bool {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
-	case "reality", "vless", "vless-ws", "ssh-tls", "hysteria", "wireguard", "wss", "tls", "shadowsocks", "shadowsocks-ws", "xdns":
+	case "reality", "vless", "vless-ws", "vless-grpc", "ssh-tls", "hysteria", "wireguard", "wss", "tls", "shadowsocks", "shadowsocks-ws", "xdns", "mdns":
 		return true
 	default:
 		return false

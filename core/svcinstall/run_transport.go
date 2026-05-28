@@ -7,11 +7,11 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/transports/hysteria"
+	"tunnelbypass/core/transports/mdns"
 	tbss "tunnelbypass/core/transports/shadowsocks"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
 	"tunnelbypass/core/transports/xdns"
-	"tunnelbypass/core/transports/mdns"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/runtimeenv"
 )
