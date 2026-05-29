@@ -64,7 +64,9 @@ func Instructions(cfg Config) string {
 	if host == "" {
 		host = "SERVER_IP"
 	}
-	payload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]", cfg.PayloadPath)
+	payload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf][crlf]", cfg.PayloadPath)
+	connectPayload := fmt.Sprintf("CONNECT %s HTTP/1.1[crlf]Host: [host][crlf][crlf]", cfg.PayloadPath)
+	wsPayload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]", cfg.PayloadPath)
 	return fmt.Sprintf(`# TunnelBypass SSH Payload (HTTP Custom / Netmod)
 Server:       %s:%d
 User:         %s
@@ -81,11 +83,17 @@ Remote Proxy: blank unless your client/network requires one
 Payload:
 %s
 
+CONNECT-style payload:
+%s
+
+WebSocket-style payload (only if the client accepts HTTP 101):
+%s
+
 Notes:
 - Host headers are client-side camouflage only; the server validates the secret path.
 - This mode does not require a wstunnel client.
 `, host, cfg.ListenPort, cfg.SSHUser, cfg.SSHPassword, cfg.PayloadPath, cfg.SSHBackendPort,
-		host, cfg.ListenPort, cfg.SSHUser, cfg.SSHPassword, payload)
+		host, cfg.ListenPort, cfg.SSHUser, cfg.SSHPassword, payload, connectPayload, wsPayload)
 }
 
 func WriteInstructions(path string, cfg Config) error {

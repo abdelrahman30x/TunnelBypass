@@ -26,6 +26,8 @@ func TestConfigDefaultsAndInstructions(t *testing.T) {
 		"Password:     p",
 		cfg.PayloadPath,
 		"PATCH " + cfg.PayloadPath + " HTTP/1.1",
+		"CONNECT " + cfg.PayloadPath + " HTTP/1.1",
+		"WebSocket-style payload",
 		"Remote Proxy: blank",
 	} {
 		if !strings.Contains(ins, want) {

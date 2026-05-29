@@ -415,10 +415,14 @@ func printPrettyClientTunnel(spec cfg.RunSpec, res transport.Result, endpoint, t
 		if path == "" {
 			path = strings.TrimSpace(res.PayloadPath)
 		}
-		payload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]", path)
+		payload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf][crlf]", path)
+		connectPayload := fmt.Sprintf("CONNECT %s HTTP/1.1[crlf]Host: [host][crlf][crlf]", path)
+		wsPayload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]", path)
 		fmt.Printf("  %s·%s %sSSH:%s %s:%d@%s:%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, endpoint, spec.Port, spec.Auth.SSHUser, spec.Auth.SSHPass)
 		fmt.Printf("  %s·%s %sUse Payload:%s ON, %sSSL:%s OFF, %sRemote Proxy:%s blank unless required\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset)
 		fmt.Printf("  %s·%s %sPayload:%s %s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, payload)
+		fmt.Printf("  %s·%s %sCONNECT Payload:%s %s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, connectPayload)
+		fmt.Printf("  %s·%s %sWS Payload (101):%s %s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, wsPayload)
 	}
 
 	fmt.Printf("\n  %s(Installed on this machine: %s)%s\n", uicolors.ColorGray, dataDir, uicolors.ColorReset)
