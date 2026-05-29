@@ -89,6 +89,10 @@ print_tag() {
     python3 -c "import json,sys; print(json.load(open(sys.argv[1],encoding='utf-8')).get('tag_name') or '')" "$TMPJSON"
     return
   fi
+  if command -v sed >/dev/null 2>&1; then
+    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$TMPJSON" | head -1
+    return
+  fi
   echo ""
 }
 
@@ -104,23 +108,42 @@ fi
 pick_url() {
   local want_sub="$1"
   if command -v jq >/dev/null 2>&1; then
-    jq -r --arg s "$want_sub" '.assets[] | select(.name | contains($s)) | .browser_download_url' "$TMPJSON" | head -1
+    jq -r --arg s "$want_sub" '.assets[] | select((.name | contains($s)) and (.name | test("\\.(tar\\.gz|tgz|zip|exe)$"))) | .browser_download_url' "$TMPJSON" | head -1
     return
   fi
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$TMPJSON" "$want_sub" <<'PY'
-import json, sys
+import json, re, sys
 path, sub = sys.argv[1], sys.argv[2]
 with open(path, encoding="utf-8") as f:
     data = json.load(f)
 for a in data.get("assets", []):
-    if sub in a.get("name", ""):
+    if sub in a.get("name", "") and re.search(r"\.(tar\.gz|tgz|zip|exe)$", a.get("name", "")):
         print(a["browser_download_url"])
         break
 PY
     return
   fi
-  say "error: install jq or python3 to parse the GitHub API response" >&2
+  if command -v awk >/dev/null 2>&1; then
+    awk -v s="$want_sub" '
+      /"name"[[:space:]]*:/ {
+        name = $0
+        sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", name)
+        sub(/".*$/, "", name)
+      }
+      /"browser_download_url"[[:space:]]*:/ {
+        url = $0
+        sub(/^.*"browser_download_url"[[:space:]]*:[[:space:]]*"/, "", url)
+        sub(/".*$/, "", url)
+        if (index(name, s) && name ~ /\.(tar\.gz|tgz|zip|exe)$/) {
+          print url
+          exit
+        }
+      }
+    ' "$TMPJSON"
+    return
+  fi
+  say "error: install jq, python3, or awk to parse the GitHub API response" >&2
   exit 1
 }
 
@@ -140,6 +163,7 @@ WORKDIR="$(mktemp -d)"
 
 case "$URL" in
   *.tar.gz|*.tgz)
+    need_cmd tar
     tar -xzf "$DL" -C "$WORKDIR"
     ;;
   *.zip)
