@@ -24,7 +24,7 @@ func runUninstallCLI(args []string) {
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	svc := fs.String("service", "", "OS service name (e.g. TunnelBypass-VLESS)")
-	typ := fs.String("type", "", "Transport: reality|vless|vless-ws|vless-grpc|ssh-tls|hysteria|wireguard|wss|tls|shadowsocks|shadowsocks-ws|xdns|mdns|ssh|udpgw")
+	typ := fs.String("type", "", "Transport: reality|vless|vless-ws|vless-grpc|ssh-tls|ssh-payload|hysteria|wireguard|wss|tls|shadowsocks|shadowsocks-ws|xdns|mdns|ssh|udpgw")
 	dataDir := fs.String("data-dir", "", "Data root (same as run --data-dir)")
 	yes := fs.Bool("yes", false, "Skip confirmation prompt")
 	if err := fs.Parse(args); err != nil {
@@ -39,7 +39,7 @@ func runUninstallCLI(args []string) {
 		serviceName = portable.OSServiceNameForTransport(*typ)
 	}
 	if serviceName == "" {
-		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|vless-grpc|ssh-tls|hysteria|wireguard|wss|tls|shadowsocks|shadowsocks-ws|xdns|mdns|ssh|udpgw")
+		fmt.Fprintln(os.Stderr, "uninstall: specify --service NAME or --type reality|vless|vless-ws|vless-grpc|ssh-tls|ssh-payload|hysteria|wireguard|wss|tls|shadowsocks|shadowsocks-ws|xdns|mdns|ssh|udpgw")
 		os.Exit(2)
 	}
 	if strings.TrimSpace(*dataDir) != "" {

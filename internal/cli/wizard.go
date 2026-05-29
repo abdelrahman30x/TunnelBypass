@@ -13,6 +13,7 @@ import (
 
 	"tunnelbypass/core/installer"
 	"tunnelbypass/core/layout"
+	"tunnelbypass/core/transports/sshpayload"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/types"
 	"tunnelbypass/internal/cfg"
@@ -174,6 +175,7 @@ var wizardMenuInternal = []string{
 	"3",  // [11] ssh (weakest vs DPI)
 	"13", // [12] xdns (VLESS + mKCP + DNS mask)
 	"14", // [13] mdns (MasterDnsVPN — true DNS tunnel)
+	"15", // [14] ssh-payload (HTTP Custom payload bridge)
 }
 
 func internalChoiceFromWizardMenu(menu string) string {
@@ -272,6 +274,10 @@ func printTunnelModeMenu() {
 		menuIdx, ColorReset, ColorBold+ColorGreen, "MasterDnsVPN", ColorReset,
 		ColorGray, padMenuSub("(DNS Tunnel)"), ColorReset,
 		stealthTag("high"), ColorGray, ColorReset, itemDisabledSuffix("mdns"))
+	fmt.Printf("  %s[14]%s %s%-14s%s%s%s%s  Stealth: %s  %sTCP%s%s\n",
+		menuIdx, ColorReset, ColorBold+ColorYellow, "SSH Payload", ColorReset,
+		ColorGray, padMenuSub("(HTTP Custom)"), ColorReset,
+		stealthTag("med"), ColorGray, ColorReset, itemDisabledSuffix("ssh-payload"))
 
 	fmt.Printf("%s%s%s\n", ColorGray, sep, ColorReset)
 	fmt.Printf("  %s[B]%s  Back to Main Menu    %s[Q]%s  Exit\n",
@@ -366,6 +372,28 @@ func promptSSHTLSInstallationScreen(reader *bufio.Reader) bool {
 	return ans == "y" || ans == "yes"
 }
 
+func promptSSHPayloadInstallationScreen(reader *bufio.Reader) bool {
+	titleSep := "========================================"
+	fmt.Printf("\n%s%s%s\n", ColorBold+ColorCyan, titleSep, ColorReset)
+	fmt.Printf("%sSSH Payload (HTTP Custom) Installation%s\n", ColorBold+ColorCyan, ColorReset)
+	fmt.Printf("%s%s%s\n\n", ColorBold+ColorCyan, titleSep, ColorReset)
+	fmt.Printf("%sSelected Mode:%s SSH Payload (HTTP request -> SSH bridge)\n", ColorBold, ColorReset)
+	fmt.Printf("%sStealth Level :%s %s***%s (Payload apps)\n\n", ColorBold, ColorReset, ColorYellow+ColorBold, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	fmt.Printf("%sHow it works:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %sHTTP Custom / Netmod sends your payload to this server port.%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %sTunnelBypass validates the secret path, replies 101/200, then bridges to embedded SSH.%s\n\n", ColorGray, ColorReset)
+	fmt.Printf("%sWhat you need:%s\n\n", ColorBold, ColorReset)
+	fmt.Printf("  %s- Port 80 reachable from clients%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- The generated secret path in the payload%s\n", ColorGray, ColorReset)
+	fmt.Printf("  %s- SSH user & password from this wizard%s\n\n", ColorGray, ColorReset)
+	fmt.Printf("%sNote:%s Remote Proxy in mobile apps is optional/client-side; it is not configured on this server.\n", ColorBold, ColorReset)
+	fmt.Printf("%s%s%s\n", ColorGray, menuSep40, ColorReset)
+	ans := strings.ToLower(strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sProceed with installation? (y/n): %s", ColorBold, ColorReset))))
+	fmt.Printf("%s%s%s\n", ColorBold+ColorCyan, titleSep, ColorReset)
+	return ans == "y" || ans == "yes"
+}
+
 type wizardPortChoice struct {
 	Port  int
 	Label string
@@ -396,6 +424,8 @@ func wizardPortChoices(transport string) []wizardPortChoice {
 		add(c.Port, c.Label)
 	}
 	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "ssh-payload":
+		add(types.DefaultSSHPayloadListenPort, "HTTP payload default")
 	case "wireguard":
 		add(types.DefaultWireGuardListenPort, "WireGuard default")
 	case "ssh":
@@ -410,6 +440,8 @@ func wizardPortChoices(transport string) []wizardPortChoice {
 
 func wizardDefaultListenPort(transport string) int {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "ssh-payload":
+		return types.DefaultSSHPayloadListenPort
 	case "xdns":
 		return types.DefaultXDNSListenPort
 	case "mdns":
@@ -421,6 +453,8 @@ func wizardDefaultListenPort(transport string) int {
 
 func wizardDefaultPortLabel(transport string, port int) string {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "ssh-payload":
+		return "HTTP payload default"
 	case "xdns":
 		return "DNS tunnel default"
 	case "mdns":
@@ -461,6 +495,8 @@ func promptWizardListenPort(reader *bufio.Reader, transport string) int {
 		fmt.Printf("\n%s[4] Listen port%s  %s(default: %d)%s\n", ColorYellow, ColorReset, ColorGray, defaultPort, ColorReset)
 		if defaultPort == types.DefaultXDNSListenPort {
 			fmt.Printf("    %sDNS tunnel modes usually use port 53; SSL/HTTPS-friendly alternatives are also listed.%s\n", ColorGray, ColorReset)
+		} else if strings.EqualFold(strings.TrimSpace(transport), "ssh-payload") {
+			fmt.Printf("    %sHTTP payload apps usually use port 80; HTTPS-friendly alternatives are also listed.%s\n", ColorGray, ColorReset)
 		} else {
 			fmt.Printf("    %sChoose an SSL/HTTPS-friendly port, or enter a custom port.%s\n", ColorGray, ColorReset)
 		}
@@ -519,6 +555,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		return false
 	}
 	var wsPathInput string
+	var payloadPathInput string
 	var uuidCustom string
 	if transport == "wss" {
 		if !promptWSSInstallationScreen(reader) {
@@ -530,9 +567,14 @@ func runSetupWizard(reader *bufio.Reader) bool {
 			return false
 		}
 	}
+	if transport == "ssh-payload" {
+		if !promptSSHPayloadInstallationScreen(reader) {
+			return false
+		}
+	}
 
 	var sni string
-	needsSNI := transport != "ssh" && transport != "wireguard" && transport != "shadowsocks" && transport != "xdns" && transport != "mdns"
+	needsSNI := transport != "ssh" && transport != "ssh-payload" && transport != "wireguard" && transport != "shadowsocks" && transport != "xdns" && transport != "mdns"
 	if needsSNI {
 		fmt.Printf("\n%s[2] Tunnel hostname (SNI / bug host) — optional%s\n", ColorYellow, ColorReset)
 		fmt.Printf("    %sHost categories:%s\n", ColorGray, ColorReset)
@@ -715,11 +757,20 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		wsPathInput = strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sWebSocket path (e.g. /ws, /api) [%s]: %s", ColorYellow, "/", ColorBold)))
 		wsPathInput = vless.NormalizeWSPath(wsPathInput)
 	}
+	if transport == "ssh-payload" {
+		autoPath := sshpayload.GeneratePayloadPath()
+		raw := strings.TrimSpace(prompt(reader, fmt.Sprintf("\n%sPayload secret path [%s]: %s", ColorYellow, autoPath, ColorBold)))
+		if raw == "" {
+			payloadPathInput = autoPath
+		} else {
+			payloadPathInput = sshpayload.NormalizePayloadPath(raw)
+		}
+	}
 
 	port := promptWizardListenPort(reader, transport)
 
 	var sshUser, sshPass string
-	if transport == "ssh" || transport == "tls" || transport == "wss" || transport == "ssh-tls" {
+	if transport == "ssh" || transport == "tls" || transport == "wss" || transport == "ssh-tls" || transport == "ssh-payload" {
 		sshUser = strings.TrimSpace(prompt(reader, fmt.Sprintf("%s[5] SSH user [tunnelbypass]: %s", ColorYellow, ColorReset)))
 		if sshUser == "" {
 			sshUser = "tunnelbypass"
@@ -730,9 +781,9 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		}
 	}
 
-	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "vless-ws" || transport == "vless-grpc" || transport == "ssh-tls" || transport == "wss" || transport == "tls" || transport == "shadowsocks" || transport == "shadowsocks-ws" || transport == "xdns" || transport == "mdns"
+	installAsService := transport == "reality" || transport == "hysteria" || transport == "wireguard" || transport == "vless-ws" || transport == "vless-grpc" || transport == "ssh-tls" || transport == "ssh-payload" || transport == "wss" || transport == "tls" || transport == "shadowsocks" || transport == "shadowsocks-ws" || transport == "xdns" || transport == "mdns"
 
-	if (transport == "ssh" || transport == "wss" || transport == "tls" || transport == "ssh-tls") &&
+	if (transport == "ssh" || transport == "wss" || transport == "tls" || transport == "ssh-tls" || transport == "ssh-payload") &&
 		(strings.EqualFold(strings.TrimSpace(sshPass), "auto") || strings.TrimSpace(sshPass) == "") {
 		// Use the persistent password stored in embed_password.txt (creating it on first run).
 		// This ensures the same password is used across wizard runs and running services,
@@ -747,6 +798,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 		RealityDest:     strings.TrimSpace(realityDest),
 		RealityDestHost: strings.TrimSpace(realityDestHost),
 		WSPath:          wsPathInput,
+		PayloadPath:     payloadPathInput,
 		MDNSDomain:      strings.TrimSpace(mdnsDomain),
 	}
 	rspec.Server.Address = strings.TrimSpace(detectedIP)
@@ -784,6 +836,7 @@ func runSetupWizard(reader *bufio.Reader) bool {
 			SSHUser:     rspec.Auth.SSHUser,
 			SSHPassword: rspec.Auth.SSHPass,
 			WSPath:      strings.TrimSpace(rspec.WSPath),
+			PayloadPath: strings.TrimSpace(rspec.PayloadPath),
 			MDNSDomain:  strings.TrimSpace(rspec.MDNSDomain),
 		}
 		if err := runTryInstallService(slog.Default(), rspec.Transport, opt, elevate.IsAdmin()); err != nil {
@@ -845,6 +898,8 @@ func wizardChoiceToTransport(choice string) string {
 		return "xdns"
 	case "14":
 		return "mdns"
+	case "15":
+		return "ssh-payload"
 	default:
 		return ""
 	}
@@ -866,6 +921,8 @@ func preferredServiceNameForTransport(transport string) string {
 		return "TunnelBypass-VLESS-GRPC"
 	case "ssh-tls":
 		return "TunnelBypass-SSH-TLS"
+	case "ssh-payload":
+		return "TunnelBypass-SSH-Payload"
 	case "tls":
 		return "TunnelBypass-SSL"
 	case "shadowsocks":

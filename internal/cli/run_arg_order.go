@@ -12,6 +12,7 @@ var canonicalRunTransports = map[string]struct{}{
 	"vless-ws":    {},
 	"vless-grpc":  {},
 	"ssh-tls":     {},
+	"ssh-payload": {},
 	"wss":         {},
 	"tls":         {},
 	"hysteria":    {},

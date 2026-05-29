@@ -43,6 +43,9 @@ type ConfigOptions struct {
 	SSHIsAdmin        bool   `json:"ssh_is_admin"`
 	SSHBackendPort    int    `json:"ssh_backend_port"`
 
+	// SSH payload transport options.
+	PayloadPath string `json:"payload_path"`
+
 	// Linux server install: adaptive networking (see ApplyLinuxTransitNetworking).
 	LinuxOptimizeNet    bool `json:"linux_optimize_net,omitempty"`
 	LinuxDNSFix         bool `json:"linux_dns_fix,omitempty"`

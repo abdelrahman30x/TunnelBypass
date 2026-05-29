@@ -12,6 +12,7 @@ func TestOSServiceNameForTransportCoversUninstallTypes(t *testing.T) {
 		"hysteria":       "TunnelBypass-Hysteria",
 		"wireguard":      "TunnelBypass-WireGuard",
 		"ssh":            "TunnelBypass-SSH",
+		"ssh-payload":    "TunnelBypass-SSH-Payload",
 		"wss":            "TunnelBypass-WSS",
 		"tls":            "TunnelBypass-SSL",
 		"shadowsocks":    "TunnelBypass-Shadowsocks",

@@ -35,6 +35,9 @@ func init() {
 	transport.RegisterProvision("wss", nil, func(log *slog.Logger, opt types.ConfigOptions, _, _ string) (transport.Result, error) {
 		return provisionWSS(log, opt)
 	})
+	transport.RegisterProvision("ssh-payload", []string{"payload", "ssh-http-payload", "http-payload"}, func(log *slog.Logger, opt types.ConfigOptions, _, _ string) (transport.Result, error) {
+		return provisionSSHPayload(log, opt)
+	})
 	transport.RegisterProvision("udpgw", nil, func(log *slog.Logger, opt types.ConfigOptions, _, _ string) (transport.Result, error) {
 		_ = log
 		_ = opt

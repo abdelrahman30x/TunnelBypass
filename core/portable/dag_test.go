@@ -32,6 +32,16 @@ func TestOrderedDependenciesWSS(t *testing.T) {
 	}
 }
 
+func TestOrderedDependenciesSSHPayload(t *testing.T) {
+	deps, err := OrderedDependencies("ssh-payload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 2 || deps[0] != "udpgw" || deps[1] != "ssh" {
+		t.Fatalf("got %v want [udpgw ssh]", deps)
+	}
+}
+
 func TestAllDependencyEdges(t *testing.T) {
 	edges, err := AllDependencyEdges()
 	if err != nil {
@@ -54,5 +64,14 @@ func TestAllDependencyEdges(t *testing.T) {
 	}
 	if !foundWSS {
 		t.Fatalf("expected ssh->wss edge, got %#v", edges)
+	}
+	foundPayload := false
+	for _, e := range edges {
+		if e[0] == "ssh" && e[1] == "ssh-payload" {
+			foundPayload = true
+		}
+	}
+	if !foundPayload {
+		t.Fatalf("expected ssh->ssh-payload edge, got %#v", edges)
 	}
 }

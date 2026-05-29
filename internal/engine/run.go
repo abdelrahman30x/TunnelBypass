@@ -65,7 +65,7 @@ func conflictCommandHint(spec cfg.RunSpec) string {
 
 func transportInstallsOSService(transport string) bool {
 	switch strings.ToLower(strings.TrimSpace(transport)) {
-	case "reality", "vless", "vless-ws", "vless-grpc", "ssh-tls", "hysteria", "wireguard", "wss", "tls", "shadowsocks", "shadowsocks-ws", "xdns", "mdns":
+	case "reality", "vless", "vless-ws", "vless-grpc", "ssh-tls", "ssh-payload", "hysteria", "wireguard", "wss", "tls", "shadowsocks", "shadowsocks-ws", "xdns", "mdns":
 		return true
 	default:
 		return false
@@ -136,6 +136,7 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 		SSHUser:             strings.TrimSpace(spec.Auth.SSHUser),
 		SSHPassword:         strings.TrimSpace(spec.Auth.SSHPass),
 		SSHBackendPort:      spec.SSH.Port, // Pass SSH port to provisioning
+		PayloadPath:         strings.TrimSpace(spec.PayloadPath),
 		MDNSDomain:          strings.TrimSpace(spec.MDNSDomain),
 		LinuxOptimizeNet:    spec.Behavior.LinuxOptimizeNet,
 		LinuxDNSFix:         spec.Behavior.LinuxDNSFix,
@@ -152,6 +153,9 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	// Sync the actual backend port discovered/ensured during provisioning
 	if res.SSHPort > 0 {
 		spec.SSH.Port = res.SSHPort
+	}
+	if strings.TrimSpace(res.PayloadPath) != "" {
+		spec.PayloadPath = strings.TrimSpace(res.PayloadPath)
 	}
 
 	if spec.Behavior.GenerateOnly || !spec.Behavior.AutoStart {
@@ -190,7 +194,11 @@ func Run(ctx context.Context, spec cfg.RunSpec) error {
 	if spec.Transport == "tls" {
 		pOpts.StunnelAccept = spec.Port
 	}
-	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" || spec.Transport == "ssh-tls" || spec.Transport == "shadowsocks" || spec.Transport == "shadowsocks-ws" || spec.Transport == "xdns" {
+	if spec.Transport == "ssh-payload" {
+		pOpts.PayloadPort = spec.Port
+		pOpts.PayloadPath = strings.TrimSpace(spec.PayloadPath)
+	}
+	if spec.Transport == "reality" || spec.Transport == "hysteria" || spec.Transport == "vless-ws" || spec.Transport == "ssh-tls" || spec.Transport == "ssh-payload" || spec.Transport == "shadowsocks" || spec.Transport == "shadowsocks-ws" || spec.Transport == "xdns" {
 		pOpts.ConfigPath = res.ServerConfigPath
 	}
 
@@ -227,7 +235,7 @@ func PrintResult(spec cfg.RunSpec, res transport.Result) {
 	if res.SharingLink != "" {
 		fmt.Printf("\n--- Client: copy this sharing link ---\n%s\n---\n", res.SharingLink)
 	}
-	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss" || spec.Transport == "ssh-tls"
+	tunnelSSH := spec.Transport == "ssh" || spec.Transport == "tls" || spec.Transport == "wss" || spec.Transport == "ssh-tls" || spec.Transport == "ssh-payload"
 	if tunnelSSH && spec.SSH.Port > 0 {
 		fmt.Printf("SSH port: %d\n", spec.SSH.Port)
 	}
@@ -242,6 +250,9 @@ func PrintResult(spec cfg.RunSpec, res transport.Result) {
 	}
 	if res.InstructionPath != "" {
 		fmt.Printf("Instructions: %s\n", res.InstructionPath)
+	}
+	if strings.TrimSpace(res.PayloadPath) != "" {
+		fmt.Printf("Payload path: %s\n", res.PayloadPath)
 	}
 	if tunnelSSH {
 		if strings.TrimSpace(spec.Auth.SSHUser) != "" {
@@ -290,7 +301,7 @@ func printPrettySSHTLSDirectConnect(spec cfg.RunSpec, res transport.Result, endp
 }
 
 // printPrettyClientTunnel is the compact ssh/tls/wss summary (one box, no instruction file dump).
-func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, transportName string) {
+func printPrettyClientTunnel(spec cfg.RunSpec, res transport.Result, endpoint, transportName string) {
 	dataDir := installer.GetBaseDir()
 
 	// Get internal and external SSH ports
@@ -310,12 +321,14 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 				externalPort = portCfg.ExternalPort
 			}
 		}
-	} else if transportName == "wss" {
+	} else if transportName == "wss" || transportName == "ssh-payload" {
 		portCfg, err := installer.LoadSSHPortConfig()
 		if err == nil && portCfg.InternalPort > 0 {
 			internalPort = portCfg.InternalPort
 		}
-		externalPort = tbssh.WSSClientLocalSSHPort()
+		if transportName == "wss" {
+			externalPort = tbssh.WSSClientLocalSSHPort()
+		}
 	}
 
 	// Fallback if not set
@@ -338,6 +351,8 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 		typeLabel = "tls (stunnel)"
 	case "wss":
 		typeLabel = "wss (wstunnel)"
+	case "ssh-payload":
+		typeLabel = "ssh-payload (HTTP Custom)"
 	}
 	fmt.Printf("  %sType:%s       %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, typeLabel, uicolors.ColorReset)
 	fmt.Printf("  %sServer:%s     %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, endpoint, uicolors.ColorReset)
@@ -348,17 +363,24 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 		internalNote := "(for WSS)"
 		if transportName == "tls" {
 			internalNote = "(stunnel → this port on server)"
+		} else if transportName == "ssh-payload" {
+			internalNote = "(payload → this port on server)"
 		}
 		fmt.Printf("  %sSSH (internal):%s %s%d%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, internalPort, uicolors.ColorReset, uicolors.ColorGray, internalNote, uicolors.ColorReset)
 		if transportName == "tls" {
 			fmt.Printf("  %sSSH (server forwarder):%s %s%d%s %s(optional direct: ssh -p %d … @%s)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, externalPort, uicolors.ColorReset, uicolors.ColorGray, externalPort, endpoint, uicolors.ColorReset)
 			fmt.Printf("  %sAfter stunnel (client):%s %s127.0.0.1:%d%s %s(ssh -p %d … @127.0.0.1)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, tbssh.TLSClientLocalSSHPort(), uicolors.ColorReset, uicolors.ColorGray, tbssh.TLSClientLocalSSHPort(), uicolors.ColorReset)
+		} else if transportName == "ssh-payload" {
+			fmt.Printf("  %sSSH (external):%s %snone%s %s(use HTTP payload listener)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, uicolors.ColorReset, uicolors.ColorGray, uicolors.ColorReset)
 		} else {
 			fmt.Printf("  %sSSH (external):%s %s%d%s %s(for clients)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, externalPort, uicolors.ColorReset, uicolors.ColorGray, uicolors.ColorReset)
 		}
 	}
 	if (transportName == "tls" || transportName == "wss") && sni != "" {
 		fmt.Printf("  %sSNI / host:%s  %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, sni, uicolors.ColorReset)
+	}
+	if transportName == "ssh-payload" && strings.TrimSpace(spec.PayloadPath) != "" {
+		fmt.Printf("  %sPayload path:%s %s%s%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorCyan, spec.PayloadPath, uicolors.ColorReset)
 	}
 	if spec.UDPGW.Port > 0 {
 		fmt.Printf("  %sUDPGW:%s       %s%d%s %s(optional)%s\n", uicolors.ColorGray, uicolors.ColorReset, uicolors.ColorBold+uicolors.ColorGreen, spec.UDPGW.Port, uicolors.ColorReset, uicolors.ColorGray, uicolors.ColorReset)
@@ -388,6 +410,15 @@ func printPrettyClientTunnel(spec cfg.RunSpec, _ transport.Result, endpoint, tra
 		}
 		fmt.Printf("  %s·%s %s%s%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, cmd, uicolors.ColorReset)
 		fmt.Printf("  %s·%s %sssh -D 1080 -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p %d %s@127.0.0.1%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, externalPort, spec.Auth.SSHUser, uicolors.ColorReset)
+	case "ssh-payload":
+		path := strings.TrimSpace(spec.PayloadPath)
+		if path == "" {
+			path = strings.TrimSpace(res.PayloadPath)
+		}
+		payload := fmt.Sprintf("PATCH %s HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf][crlf]", path)
+		fmt.Printf("  %s·%s %sSSH:%s %s:%d@%s:%s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, endpoint, spec.Port, spec.Auth.SSHUser, spec.Auth.SSHPass)
+		fmt.Printf("  %s·%s %sUse Payload:%s ON, %sSSL:%s OFF, %sRemote Proxy:%s blank unless required\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset)
+		fmt.Printf("  %s·%s %sPayload:%s %s\n", uicolors.ColorCyan, uicolors.ColorReset, uicolors.ColorBold, uicolors.ColorReset, payload)
 	}
 
 	fmt.Printf("\n  %s(Installed on this machine: %s)%s\n", uicolors.ColorGray, dataDir, uicolors.ColorReset)
@@ -403,7 +434,7 @@ func printPrettyResult(spec cfg.RunSpec, res transport.Result) {
 		printPrettySSHTLSDirectConnect(spec, res, endpoint)
 		return
 	}
-	if transportName == "ssh" || transportName == "tls" || transportName == "wss" {
+	if transportName == "ssh" || transportName == "tls" || transportName == "wss" || transportName == "ssh-payload" {
 		printPrettyClientTunnel(spec, res, endpoint, transportName)
 		return
 	}

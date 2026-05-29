@@ -48,6 +48,13 @@ func InstallRunTransportService(transport string, opt types.ConfigOptions, isAdm
 			u = "tunnelbypass"
 		}
 		return installer.EnsureSshWstunnelServer(opt.Port, u, pw, true, isAdmin)
+	case "ssh-payload", "payload", "ssh-http-payload", "http-payload":
+		u := strings.TrimSpace(opt.SSHUser)
+		pw := strings.TrimSpace(opt.SSHPassword)
+		if u == "" {
+			u = "tunnelbypass"
+		}
+		return installer.EnsureSshPayloadServer(opt.Port, opt.PayloadPath, u, pw, true, isAdmin)
 	case "tls":
 		u := strings.TrimSpace(opt.SSHUser)
 		pw := strings.TrimSpace(opt.SSHPassword)

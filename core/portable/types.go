@@ -24,6 +24,8 @@ type Options struct {
 
 	WssPort       int
 	StunnelAccept int
+	PayloadPort   int
+	PayloadPath   string
 
 	// Orchestrator: udpgw already running (ssh stack).
 	ExternalUDPGW bool

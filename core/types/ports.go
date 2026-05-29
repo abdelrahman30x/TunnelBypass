@@ -19,6 +19,9 @@ const (
 	// DefaultSSHSpecListenPort is the spec/wizard default for the legacy embedded SSH transport listen port.
 	DefaultSSHSpecListenPort = 22
 
+	// DefaultSSHPayloadListenPort is the cleartext HTTP payload listener port for HTTP Custom / Netmod.
+	DefaultSSHPayloadListenPort = 80
+
 	// DefaultUDPGWPort is the UDP gateway sidecar listen port (udpgw).
 	DefaultUDPGWPort = 7300
 

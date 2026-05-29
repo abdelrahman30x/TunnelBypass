@@ -24,7 +24,7 @@ This is **not** a guarantee against every DPI stack—only a practical ordering 
 | Xray (VLESS, WSS, …) | v2rayN, Nekoray, sing-box, etc. |
 | Hysteria v2 | Official / compatible Hy2 clients |
 | WireGuard | OS WireGuard apps |
-| SSH / stunnel / wstunnel | SSH clients, custom HTTP stacks |
+| SSH / stunnel / wstunnel / ssh-payload | SSH clients, custom HTTP stacks, HTTP Custom / Netmod payload mode |
 | Shadowsocks + v2ray-plugin (SS + SNI) | ss:// importers, shadowsocks-rust + plugin, NekoBox, sing-box (manual profile), etc. |
 
 **SS + SNI listen port:** TunnelBypass defaults to **40000** (TCP+UDP) when no port is set (wizard, `run`, spec). Open that port on the VPS if you use the default. Choose **443** in the wizard instead if you want ordinary-HTTPS port camouflage.

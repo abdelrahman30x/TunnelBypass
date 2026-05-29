@@ -40,6 +40,7 @@ func TestWizardPortChoicesIncludeTransportDefaults(t *testing.T) {
 	}{
 		{transport: "wireguard", want: types.DefaultWireGuardListenPort},
 		{transport: "ssh", want: types.DefaultSSHSpecListenPort},
+		{transport: "ssh-payload", want: types.DefaultSSHPayloadListenPort},
 		{transport: "xdns", want: types.DefaultXDNSListenPort},
 		{transport: "mdns", want: types.DefaultMDNSListenPort},
 	} {
@@ -55,6 +56,20 @@ func TestWizardPortChoicesIncludeTransportDefaults(t *testing.T) {
 				t.Fatalf("choices for %s did not include %d", tc.transport, tc.want)
 			}
 		})
+	}
+}
+
+func TestWizardSSHPayloadPortDefaultsTo80(t *testing.T) {
+	choices := wizardPortChoices("ssh-payload")
+	if len(choices) == 0 || choices[0].Port != 80 {
+		t.Fatalf("first choice got %#v, want port 80 first", choices)
+	}
+	if got := wizardDefaultListenPort("ssh-payload"); got != 80 {
+		t.Fatalf("default got %d, want 80", got)
+	}
+	gotPort, gotCustom, gotOK := parseWizardPortChoice("", choices, wizardDefaultListenPort("ssh-payload"))
+	if gotPort != 80 || gotCustom || !gotOK {
+		t.Fatalf("empty choice got port=%d custom=%v ok=%v, want 80 false true", gotPort, gotCustom, gotOK)
 	}
 }
 

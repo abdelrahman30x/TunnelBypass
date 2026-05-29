@@ -32,6 +32,7 @@ func Report(w io.Writer, pingCheck bool) {
 	names := []string{
 		"TunnelBypass-UDPGW",
 		"TunnelBypass-WSS",
+		"TunnelBypass-SSH-Payload",
 		"TunnelBypass-VLESS-WS",
 		"TunnelBypass-VLESS-GRPC",
 		"TunnelBypass-SSL",

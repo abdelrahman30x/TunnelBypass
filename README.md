@@ -51,6 +51,7 @@
 
 - `ssh` — classic SSH; optional UDPGW for UDP
 - `ssh-tls` — TLS front-end (Xray) to SSH backend
+- `ssh-payload` — HTTP payload listener for HTTP Custom / Netmod style SSH
 
 <p><strong>UDP / QUIC</strong></p>
 

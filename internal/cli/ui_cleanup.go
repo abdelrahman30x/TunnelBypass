@@ -25,6 +25,7 @@ const (
 	transportSSH           installedTransport = "ssh"
 	transportSSL           installedTransport = "ssl"
 	transportWSS           installedTransport = "wss"
+	transportSSHPayload    installedTransport = "ssh-payload"
 	transportSSHTLS        installedTransport = "ssh-tls"
 	transportGRPC          installedTransport = "grpc"
 	transportUDPGW         installedTransport = "udpgw"
@@ -40,6 +41,8 @@ func detectInstalledTransport(serviceName string) installedTransport {
 	switch {
 	case strings.Contains(s, "ssh-tls"):
 		return transportSSHTLS
+	case strings.Contains(s, "ssh-payload"):
+		return transportSSHPayload
 	case strings.Contains(s, "ssh-forwarder"):
 		return transportSSH
 	case strings.Contains(s, "vless-ws"):
@@ -88,6 +91,9 @@ func detectInstalledTransport(serviceName string) installedTransport {
 		}
 		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("wstunnel"), "wss_tunnel_instructions.txt")); err == nil {
 			return transportWSS
+		}
+		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("ssh-payload"), "ssh_payload_instructions.txt")); err == nil {
+			return transportSSHPayload
 		}
 		if _, err := os.Stat(filepath.Join(installer.GetConfigDir("stunnel"), "stunnel_server.conf")); err == nil {
 			return transportSSL
@@ -167,7 +173,7 @@ func dedupeServiceNames(names []string) []string {
 
 func sshBackedTransport(tr installedTransport) bool {
 	switch tr {
-	case transportSSH, transportSSL, transportWSS, transportSSHTLS:
+	case transportSSH, transportSSL, transportWSS, transportSSHTLS, transportSSHPayload:
 		return true
 	default:
 		return false
@@ -191,7 +197,7 @@ func removableCompanionServices(primary string) []string {
 }
 
 func otherSSHFrontendsInstalled(primary string) bool {
-	for _, name := range []string{"TunnelBypass-WSS", "TunnelBypass-SSL", "TunnelBypass-SSH-TLS"} {
+	for _, name := range []string{"TunnelBypass-WSS", "TunnelBypass-SSL", "TunnelBypass-SSH-TLS", "TunnelBypass-SSH-Payload"} {
 		if strings.EqualFold(name, primary) {
 			continue
 		}
@@ -230,6 +236,8 @@ func cleanupArtifactsForTransport(tr installedTransport, serviceName string) {
 		_ = os.RemoveAll(installer.GetConfigDir("stunnel"))
 	case transportWSS:
 		_ = os.RemoveAll(installer.GetConfigDir("wstunnel"))
+	case transportSSHPayload:
+		_ = os.RemoveAll(installer.GetConfigDir("ssh-payload"))
 	case transportSSHTLS:
 		_ = os.RemoveAll(installer.GetConfigDir("ssh-tls"))
 	case transportGRPC:
@@ -285,6 +293,9 @@ func displayInstructionFile(tr installedTransport) {
 	case transportWSS:
 		p = filepath.Join(installer.GetConfigDir("wstunnel"), "wss_tunnel_instructions.txt")
 		title = "WSTUNNEL INSTRUCTIONS"
+	case transportSSHPayload:
+		p = filepath.Join(installer.GetConfigDir("ssh-payload"), "ssh_payload_instructions.txt")
+		title = "SSH PAYLOAD INSTRUCTIONS"
 	default:
 		return
 	}

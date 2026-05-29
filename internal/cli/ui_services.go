@@ -34,6 +34,7 @@ func findInstalledServices() []string {
 		installer.UDPGWServiceName,
 		"TunnelBypass-SSH",
 		"TunnelBypass-SSH-Forwarder",
+		"TunnelBypass-SSH-Payload",
 		"TunnelBypass-SSL",
 		"TunnelBypass-WSS",
 		"TunnelBypass-Tunnel",

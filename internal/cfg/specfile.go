@@ -27,6 +27,7 @@ type SpecFile struct {
 	RealityDest     string `json:"reality_dest,omitempty" yaml:"reality_dest,omitempty"`
 	RealityDestHost string `json:"reality_dest_host,omitempty" yaml:"reality_dest_host,omitempty"`
 	ObfsPassword    string `json:"obfs_password,omitempty" yaml:"obfs_password,omitempty"`
+	PayloadPath     string `json:"payload_path,omitempty" yaml:"payload_path,omitempty"`
 
 	DataDir      string `json:"data_dir,omitempty" yaml:"data_dir,omitempty"`
 	ClientConfig string `json:"client_config,omitempty" yaml:"client_config,omitempty"`
@@ -182,6 +183,10 @@ func ApplySpecDefaults(t string, f *SpecFile) {
 		if f.Port == 0 {
 			f.Port = types.DefaultTLSTunnelListenPort
 		}
+	case "ssh-payload", "payload", "ssh-http-payload", "http-payload":
+		if f.Port == 0 {
+			f.Port = types.DefaultSSHPayloadListenPort
+		}
 	case "ssh-tls":
 		if f.Port == 0 {
 			f.Port = types.DefaultSSHTLSDirectListenPort
@@ -226,6 +231,7 @@ func SpecToConfigOptions(transport string, f SpecFile) types.ConfigOptions {
 		SSHUser:             strings.TrimSpace(f.SSHUser),
 		SSHPassword:         strings.TrimSpace(f.SSHPassword),
 		SSHWelcomeMessage:   "",
+		PayloadPath:         strings.TrimSpace(f.PayloadPath),
 		LinuxOptimizeNet:    f.LinuxOptimizeNet,
 		LinuxDNSFix:         f.LinuxDNSFix,
 		LinuxRouter:         f.LinuxRouter,
@@ -242,5 +248,7 @@ func SpecToPortableOptions(f SpecFile) portable.Options {
 		SSHPass:       strings.TrimSpace(f.SSHPassword),
 		WssPort:       f.WssPort,
 		StunnelAccept: f.StunnelAccept,
+		PayloadPort:   f.Port,
+		PayloadPath:   strings.TrimSpace(f.PayloadPath),
 	}
 }

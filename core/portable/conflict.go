@@ -156,6 +156,8 @@ func OSServiceNameForTransport(t string) string {
 		return "TunnelBypass-VLESS-GRPC"
 	case "ssh-tls":
 		return "TunnelBypass-SSH-TLS"
+	case "ssh-payload", "payload", "ssh-http-payload", "http-payload":
+		return "TunnelBypass-SSH-Payload"
 	case "hysteria":
 		return "TunnelBypass-Hysteria"
 	case "wireguard":

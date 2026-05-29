@@ -9,4 +9,5 @@ type Result struct {
 	SharingLink      string
 	ListenPort       int
 	SSHPort          int
+	PayloadPath      string
 }

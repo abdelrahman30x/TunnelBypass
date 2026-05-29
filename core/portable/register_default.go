@@ -10,6 +10,7 @@ import (
 	"runtime"
 
 	"tunnelbypass/core/installer"
+	"tunnelbypass/core/transports/sshpayload"
 	"tunnelbypass/core/types"
 	"tunnelbypass/core/udpgw"
 )
@@ -25,6 +26,7 @@ func init() {
 	Register("hysteria", func() Transport { return hysteriaTransport{} })
 	Register("wireguard", func() Transport { return wireguardTransport{} })
 	Register("wss", func() Transport { return wssTransport{} })
+	Register("ssh-payload", func() Transport { return sshPayloadTransport{} })
 	Register("tls", func() Transport { return tlsTransport{} })
 	Register("shadowsocks", func() Transport { return shadowsocksTransport{} })
 	Register("xdns", func() Transport { return xdnsTransport{} })
@@ -238,6 +240,58 @@ func (wssTransport) Run(ctx context.Context, log *slog.Logger, o Options) error 
 	}
 	_ = WriteRunMeta(installer.GetBaseDir(), "wss", RunMeta{Ports: map[string]int{"wss": wssPort}, Extra: map[string]any{"ssh_backend": sshBack}})
 	return runForeground(ctx, log, "wstunnel", exe, args)
+}
+
+type sshPayloadTransport struct{}
+
+func (sshPayloadTransport) Name() string { return "ssh-payload" }
+
+func (sshPayloadTransport) Dependencies() []string { return []string{"ssh"} }
+
+func (sshPayloadTransport) Run(ctx context.Context, log *slog.Logger, o Options) error {
+	cfgPath := defaultConfigPath("ssh-payload", "server.json", o.ConfigPath)
+	cfg, _ := sshpayload.LoadConfig(cfgPath)
+
+	payloadPort := o.PayloadPort
+	if payloadPort <= 0 {
+		payloadPort = cfg.ListenPort
+	}
+	if payloadPort <= 0 {
+		payloadPort = types.DefaultSSHPayloadListenPort
+	}
+
+	payloadPath := o.PayloadPath
+	if payloadPath == "" {
+		payloadPath = cfg.PayloadPath
+	}
+	payloadPath = sshpayload.NormalizePayloadPath(payloadPath)
+	if payloadPath == "" {
+		return fmt.Errorf("ssh-payload: missing payload path; run setup again or pass --payload-path")
+	}
+
+	back := o.SSHPort
+	if back <= 0 {
+		back = cfg.SSHBackendPort
+	}
+	if back <= 0 {
+		back = installer.GetSSHBackendPort()
+	}
+	if !installer.PortListening(back) {
+		return fmt.Errorf("ssh-payload: local SSH not listening on port %d; start TunnelBypass-SSH first", back)
+	}
+
+	listen := fmt.Sprintf("0.0.0.0:%d", payloadPort)
+	target := fmt.Sprintf("127.0.0.1:%d", back)
+	_ = WriteRunMeta(installer.GetBaseDir(), "ssh-payload", RunMeta{
+		Ports: map[string]int{"ssh-payload": payloadPort},
+		Extra: map[string]any{"ssh_backend": target, "payload_path": payloadPath},
+	})
+	return sshpayload.Run(ctx, sshpayload.Options{
+		ListenAddr:  listen,
+		TargetAddr:  target,
+		PayloadPath: payloadPath,
+		Logger:      log.With("component", "ssh-payload"),
+	})
 }
 
 type tlsTransport struct{}

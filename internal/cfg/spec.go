@@ -24,6 +24,8 @@ type RunSpec struct {
 	RealityDestHost string `json:"reality_dest_host,omitempty"`
 	// WSPath WebSocket path for transport vless-ws (VLESS + WS + TLS).
 	WSPath string `json:"ws_path,omitempty"`
+	// PayloadPath is the secret HTTP request path for ssh-payload.
+	PayloadPath string `json:"payload_path,omitempty"`
 
 	// MDNSDomain is the tunnel subdomain for MasterDnsVPN (e.g., v.example.com).
 	MDNSDomain string `json:"mdns_domain,omitempty"`
@@ -104,6 +106,9 @@ func Merge(base, override RunSpec) RunSpec {
 	if strings.TrimSpace(override.WSPath) != "" {
 		out.WSPath = strings.TrimSpace(override.WSPath)
 	}
+	if strings.TrimSpace(override.PayloadPath) != "" {
+		out.PayloadPath = strings.TrimSpace(override.PayloadPath)
+	}
 	if strings.TrimSpace(override.MDNSDomain) != "" {
 		out.MDNSDomain = strings.TrimSpace(override.MDNSDomain)
 	}
@@ -179,6 +184,8 @@ func NormalizeTransport(t string) string {
 		return "ssh-tls"
 	case "wss", "wstunnel":
 		return "wss"
+	case "ssh-payload", "payload", "ssh-http-payload", "http-payload":
+		return "ssh-payload"
 	case "tls", "stunnel":
 		return "tls"
 	case "hysteria":
@@ -216,6 +223,8 @@ func RunnerTransportFor(t string) string {
 		return "vless"
 	case "wss":
 		return "wss"
+	case "ssh-payload":
+		return "ssh-payload"
 	case "tls":
 		return "tls"
 	case "hysteria":
@@ -259,6 +268,8 @@ func FillDefaults(s *RunSpec) {
 		switch s.Transport {
 		case "reality", "wss", "tls", "vless-ws", "vless-grpc":
 			s.Port = types.DefaultTLSTunnelListenPort
+		case "ssh-payload":
+			s.Port = types.DefaultSSHPayloadListenPort
 		case "ssh-tls":
 			s.Port = types.DefaultSSHTLSDirectListenPort
 		case "hysteria":
@@ -281,7 +292,7 @@ func FillDefaults(s *RunSpec) {
 	}
 	if s.SSH.Port == 0 {
 		switch s.Transport {
-		case "wss", "tls", "ssh", "ssh-tls":
+		case "wss", "tls", "ssh", "ssh-tls", "ssh-payload":
 			// Use dynamic port allocation for SSH backend (0 triggers auto-assignment)
 			s.SSH.Port = 0
 		default:
@@ -292,6 +303,9 @@ func FillDefaults(s *RunSpec) {
 		s.UDPGW.Port = types.DefaultUDPGWPort
 	}
 	if s.Transport == "ssh-tls" {
+		s.UDPGW.Enabled = true
+	}
+	if s.Transport == "ssh-payload" {
 		s.UDPGW.Enabled = true
 	}
 	if !s.Behavior.AutoStart {

@@ -276,6 +276,8 @@ func runManageServiceMenu(reader *bufio.Reader) {
 				_ = wireguard.InstallWireGuardService(sName, filepath.Join(installer.GetConfigDir("wireguard"), "wg_server.conf"), 51820, types.ConfigOptions{})
 			} else if strings.Contains(sName, "Shadowsocks") {
 				_ = installer.CreateService(sName, sName, filepath.Join(installer.GetSystemBinaryDir("shadowsocks"), "ssserver"), []string{"-c", filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")}, installer.GetBaseDir())
+			} else if strings.Contains(sName, "SSH-Payload") {
+				_ = installer.EnsureSshPayloadServer(0, "", "", "", false, false)
 			} else {
 				cfgPath, port := xrayServiceConfigPathAndPort(sName)
 				_ = vless.InstallXrayService(sName, cfgPath, port, types.ConfigOptions{})
@@ -375,7 +377,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			// no extra menu items for MDNS
 		case transportWireGuard:
 			fmt.Printf("  %s[4]%s  %sShow client config / QR%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
-		case transportSSH, transportSSL, transportWSS:
+		case transportSSH, transportSSL, transportWSS, transportSSHPayload:
 			fmt.Printf("  %s[4]%s  %sShow instructions%s\n", ColorBold+ColorWhite, ColorReset, ColorGreen, ColorReset)
 		default:
 		}
@@ -409,6 +411,10 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 				installer.UninstallService(serviceName)
 				time.Sleep(1 * time.Second)
 				_ = installer.CreateService(serviceName, serviceName, filepath.Join(installer.GetSystemBinaryDir("shadowsocks"), "ssserver"), []string{"-c", filepath.Join(installer.GetConfigDir("shadowsocks"), "server.json")}, installer.GetBaseDir())
+			} else if tr == transportSSHPayload {
+				installer.UninstallService(serviceName)
+				time.Sleep(1 * time.Second)
+				_ = installer.EnsureSshPayloadServer(0, "", "", "", false, false)
 			} else if tr == transportMDNS {
 				installer.UninstallService(serviceName)
 				time.Sleep(1 * time.Second)
@@ -442,7 +448,7 @@ func showInstalledMenu(reader *bufio.Reader, serviceName string) bool {
 			case transportWireGuard:
 				displayWireGuardClientInfo()
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
-			case transportSSH, transportSSL, transportWSS:
+			case transportSSH, transportSSL, transportWSS, transportSSHPayload:
 				displayInstructionFile(tr)
 				prompt(reader, fmt.Sprintf("\n%sPress Enter to continue...%s", ColorGray, ColorReset))
 			default:

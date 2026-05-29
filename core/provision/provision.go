@@ -14,6 +14,7 @@ import (
 	"tunnelbypass/core/transports/mdns"
 	tbss "tunnelbypass/core/transports/shadowsocks"
 	tbssh "tunnelbypass/core/transports/ssh"
+	"tunnelbypass/core/transports/sshpayload"
 	"tunnelbypass/core/transports/vless"
 	"tunnelbypass/core/transports/wireguard"
 	"tunnelbypass/core/transports/xdns"
@@ -545,6 +546,67 @@ func provisionWSS(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
 	r.InstructionPath = p
 	r.ListenPort = opt.Port
 	r.SSHPort = opt.SSHBackendPort
+	return r, nil
+}
+
+func provisionSSHPayload(log *slog.Logger, opt types.ConfigOptions) (Result, error) {
+	var r Result
+	installer.SetSSHServerForwarder(false)
+	defer installer.SetSSHServerForwarder(true)
+
+	opt.ServerAddr = ResolveServerAddr(opt.ServerAddr)
+	if opt.Port == 0 {
+		opt.Port = types.DefaultSSHPayloadListenPort
+	}
+	ApplyPortAllocation(log, &opt.Port, "tcp", "TunnelBypass-SSH-Payload")
+
+	if strings.TrimSpace(opt.SSHUser) == "" {
+		opt.SSHUser = "tunnelbypass"
+	}
+	if strings.TrimSpace(opt.SSHPassword) == "" {
+		opt.SSHPassword = installer.ReadOrCreateEmbedSSHPassword()
+	}
+	if strings.TrimSpace(opt.SSHWelcomeMessage) == "" {
+		opt.SSHWelcomeMessage = fmt.Sprintf("Welcome to TunnelBypass SSH Payload.\nAuthorized users only.\nUser: %s", opt.SSHUser)
+	}
+
+	if err := installer.EnsureWindowsUser(opt.SSHUser, opt.SSHPassword, true, false); err != nil && log != nil {
+		log.Warn("provision: windows user", "err", err)
+	}
+	if err := ensureSSHBackend(log, &opt); err != nil {
+		return r, err
+	}
+
+	payloadPath := sshpayload.NormalizePayloadPath(opt.PayloadPath)
+	if payloadPath == "" {
+		payloadPath = sshpayload.GeneratePayloadPath()
+	}
+	cfg := sshpayload.Config{
+		Transport:      "ssh-payload",
+		ServerAddr:     opt.ServerAddr,
+		ListenPort:     opt.Port,
+		PayloadPath:    payloadPath,
+		SSHBackendPort: opt.SSHBackendPort,
+		SSHUser:        opt.SSHUser,
+		SSHPassword:    opt.SSHPassword,
+	}.WithDefaults()
+
+	cfgDir := installer.GetConfigDir("ssh-payload")
+	configPath := filepath.Join(cfgDir, "server.json")
+	if err := sshpayload.WriteConfig(configPath, cfg); err != nil {
+		return r, err
+	}
+	instructionsPath := filepath.Join(cfgDir, "ssh_payload_instructions.txt")
+	if err := sshpayload.WriteInstructions(instructionsPath, cfg); err != nil {
+		return r, err
+	}
+
+	r.Transport = "ssh-payload"
+	r.ServerConfigPath = configPath
+	r.InstructionPath = instructionsPath
+	r.ListenPort = cfg.ListenPort
+	r.SSHPort = cfg.SSHBackendPort
+	r.PayloadPath = cfg.PayloadPath
 	return r, nil
 }
 
