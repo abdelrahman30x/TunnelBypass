@@ -76,6 +76,9 @@
 curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 ```
 
+When run as `root`, the installer places `tunnelbypass` in `/usr/local/bin`.
+For non-root users it installs to `$HOME/.local/bin`; if your current shell has not loaded that PATH yet, run the exact `Run now:` command printed by the installer or open a new shell.
+
 Optional custom prefix:
 ```bash
 INSTALL_PREFIX="$HOME/.local/bin" curl -fsSL ... | bash

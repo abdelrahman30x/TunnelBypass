@@ -3,12 +3,13 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 # Default: latest published GitHub release (no version required).
-# Default install: $HOME/.local/bin. Re-running does not duplicate the PATH line in your profile.
+# Default install: /usr/local/bin when running as root, otherwise $HOME/.local/bin.
+# Re-running does not duplicate the PATH line in your profile.
 # Environment (optional):
 #   INSTALL_OWNER   default: abdelrahman30x
 #   INSTALL_REPO    default: TunnelBypass
 #   INSTALL_VERSION only if you must pin a tag (e.g. v1.2.1); otherwise omit for latest
-#   INSTALL_PREFIX  install directory (default: $HOME/.local/bin)
+#   INSTALL_PREFIX  install directory (default: /usr/local/bin as root, otherwise $HOME/.local/bin)
 
 set -euo pipefail
 
@@ -18,6 +19,10 @@ VERSION="${INSTALL_VERSION:-}"
 PREFIX="${INSTALL_PREFIX:-}"
 
 say() { printf '%s\n' "$*"; }
+
+shell_quote() {
+  printf '%q' "$1"
+}
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -47,6 +52,9 @@ case "$OS" in
     ;;
 esac
 
+if [[ -z "$PREFIX" && "${EUID:-$(id -u)}" -eq 0 ]]; then
+  PREFIX="/usr/local/bin"
+fi
 if [[ -z "$PREFIX" ]]; then
   PREFIX="${HOME}/.local/bin"
 fi
@@ -187,8 +195,9 @@ path_in_shell_profile() {
 }
 
 case ":${PATH:-}:" in
-  *":${PREFIX}:"*) ;;
+  *":${PREFIX}:"*) SESSION_HAS_PREFIX=1 ;;
   *)
+    SESSION_HAS_PREFIX=0
     path_in_shell_profile
     say "[i] This session may not include $PREFIX yet. Run once:"
     say "    export PATH=\"${PREFIX}:\$PATH\""
@@ -201,4 +210,13 @@ if [[ -n "$VERSION_OUT" ]]; then
   say "    Version: $VERSION_OUT"
 fi
 
-say "    Run: tunnelbypass"
+RESOLVED_BIN="$(command -v tunnelbypass 2>/dev/null || true)"
+if [[ -n "$RESOLVED_BIN" && "$RESOLVED_BIN" == "$INSTALLED_BIN" ]]; then
+  say "    Run: tunnelbypass"
+else
+  if [[ -n "$RESOLVED_BIN" && "$RESOLVED_BIN" != "$INSTALLED_BIN" ]]; then
+    say "[i] Another tunnelbypass is earlier in PATH: $RESOLVED_BIN"
+  fi
+  say "    Run now: $(shell_quote "$INSTALLED_BIN")"
+  say "    After PATH refresh: tunnelbypass"
+fi
