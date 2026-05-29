@@ -3,7 +3,8 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/abdelrahman30x/TunnelBypass/main/scripts/install.sh | bash
 # Default: latest published GitHub release (no version required).
-# Default install: /usr/local/bin when running as root, otherwise $HOME/.local/bin.
+# Default install: existing tunnelbypass in PATH, otherwise /usr/local/bin as root
+# or $HOME/.local/bin for non-root users.
 # Re-running does not duplicate the PATH line in your profile.
 # Environment (optional):
 #   INSTALL_OWNER   default: abdelrahman30x
@@ -17,6 +18,10 @@ OWNER="${INSTALL_OWNER:-abdelrahman30x}"
 REPO="${INSTALL_REPO:-TunnelBypass}"
 VERSION="${INSTALL_VERSION:-}"
 PREFIX="${INSTALL_PREFIX:-}"
+PREFIX_EXPLICIT=0
+if [[ -n "${INSTALL_PREFIX:-}" ]]; then
+  PREFIX_EXPLICIT=1
+fi
 
 say() { printf '%s\n' "$*"; }
 
@@ -52,6 +57,10 @@ case "$OS" in
     ;;
 esac
 
+EXISTING_BIN="$(command -v tunnelbypass 2>/dev/null || true)"
+if [[ "$PREFIX_EXPLICIT" -eq 0 && "$EXISTING_BIN" == /* && -f "$EXISTING_BIN" ]]; then
+  PREFIX="$(dirname "$EXISTING_BIN")"
+fi
 if [[ -z "$PREFIX" && "${EUID:-$(id -u)}" -eq 0 ]]; then
   PREFIX="/usr/local/bin"
 fi
